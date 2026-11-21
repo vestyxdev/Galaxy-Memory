@@ -190,6 +190,26 @@ async function main() {
   );
 
   server.registerTool(
+    "delete_memory",
+    {
+      description: "Delete a memory and all its edges by id.",
+      inputSchema: {
+        id: z.string().uuid(),
+      },
+    },
+    async ({ id }) => {
+      try {
+        const existing = await backend.getMemory(id);
+        if (!existing) return fail(`Memory ${id} not found`);
+        await backend.deleteMemory(id);
+        return ok({ deleted: id, title: existing.title });
+      } catch (error) {
+        return fail(error);
+      }
+    },
+  );
+
+  server.registerTool(
     "get_memory_context",
     {
       description: "Return one memory plus its connected subgraph up to `depth` hops.",

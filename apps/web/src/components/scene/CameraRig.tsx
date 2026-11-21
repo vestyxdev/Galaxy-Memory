@@ -21,6 +21,15 @@ export function CameraRig() {
   const selectedId = useGalaxy((s) => s.selectedId);
 
   useEffect(() => {
+    if (focusRequest.point) {
+      const target = new Vector3(...focusRequest.point);
+      const cam = target
+        .clone()
+        .multiplyScalar(1.55)
+        .add(new Vector3(0, 1.9, 0));
+      flight.current = { cam, tgt: target.multiplyScalar(0.9) };
+      return;
+    }
     if (focusRequest.id === null) {
       flight.current = { cam: HOME_POSITION.clone(), tgt: HOME_TARGET.clone() };
       return;

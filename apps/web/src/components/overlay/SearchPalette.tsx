@@ -19,6 +19,7 @@ export function SearchPalette() {
   const open = useGalaxy((s) => s.searchOpen);
   const setSearchOpen = useGalaxy((s) => s.setSearchOpen);
   const setHighlight = useGalaxy((s) => s.setHighlight);
+  const setHovered = useGalaxy((s) => s.setHovered);
   const openMemory = useGalaxy((s) => s.openMemory);
   const memories = useGalaxy((s) => s.memories);
   const backend = useGalaxy((s) => s.backend);
@@ -81,19 +82,20 @@ export function SearchPalette() {
     (id: string) => {
       setSearchOpen(false);
       setHighlight(null);
+      setHovered(null);
       setQuery("");
       openMemory(id);
     },
-    [openMemory, setHighlight, setSearchOpen],
+    [openMemory, setHighlight, setHovered, setSearchOpen],
   );
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "ArrowDown") {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
-      setActive((i) => Math.min(i + 1, results.length - 1));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setActive((i) => Math.max(i - 1, 0));
+      const next =
+        e.key === "ArrowDown" ? Math.min(active + 1, results.length - 1) : Math.max(active - 1, 0);
+      setActive(next);
+      setHovered(results[next]?.match.id ?? null);
     } else if (e.key === "Enter" && results[active]) {
       e.preventDefault();
       pick(results[active].match.id);
@@ -113,6 +115,7 @@ export function SearchPalette() {
         setSearchOpen(o);
         if (!o) {
           setHighlight(null);
+          setHovered(null);
           setQuery("");
         }
       }}
@@ -157,7 +160,10 @@ export function SearchPalette() {
               type="button"
               data-index={i}
               onClick={() => pick(r.match.id)}
-              onMouseEnter={() => setActive(i)}
+              onMouseEnter={() => {
+                setActive(i);
+                setHovered(r.match.id);
+              }}
               className={cn(
                 "flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left transition-colors",
                 i === active ? "bg-white/10" : "hover:bg-white/5",

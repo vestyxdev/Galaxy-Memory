@@ -140,15 +140,28 @@
   flex-shrink: 0;
 }
 
-/* Floating cluster titles — light serif italic, always-on constellation names. */
+/* Floating cluster titles — light serif italic; clickable to fly to the sector. */
 .gm-cluster-label {
-  pointer-events: none;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 1px;
   white-space: nowrap;
   text-align: center;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  transition: transform 0.25s ease;
+}
+.gm-cluster-label:hover {
+  transform: scale(1.08);
+}
+.gm-cluster-label:hover .gm-cluster-label-name {
+  color: rgb(255 255 255 / 0.85);
+}
+.gm-cluster-label:hover .gm-cluster-label-count {
+  color: rgb(255 255 255 / 0.4);
 }
 .gm-cluster-label-name {
   font-family: Georgia, "Times New Roman", serif;

@@ -13,6 +13,7 @@ const LABEL_RADIUS = (RADIUS_MIN + RADIUS_MAX) / 2;
 export function ClusterLabels() {
   const clusters = useGalaxy((s) => s.clusters);
   const memories = useGalaxy((s) => s.memories);
+  const focusCluster = useGalaxy((s) => s.focusCluster);
 
   const labels = useMemo(() => {
     const counts = new Map<string, number>();
@@ -40,14 +41,19 @@ export function ClusterLabels() {
           center
           distanceFactor={11}
           zIndexRange={[10, 0]}
-          style={{ pointerEvents: "none" }}
+          style={{ pointerEvents: "auto" }}
         >
-          <div className="gm-cluster-label">
+          <button
+            type="button"
+            className="gm-cluster-label cursor-pointer"
+            title={`Fly to ${cluster}`}
+            onClick={() => focusCluster(cluster)}
+          >
             <span className="gm-cluster-label-name">{cluster}</span>
             <span className="gm-cluster-label-count">
               {count} {count === 1 ? "link" : "links"}
             </span>
-          </div>
+          </button>
         </Html>
       ))}
     </group>

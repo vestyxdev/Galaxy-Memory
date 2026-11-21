@@ -156,6 +156,11 @@ function EditorForm({ memory }: { memory: Memory | undefined }) {
   };
 
   const onContentKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+      e.preventDefault();
+      void save();
+      return;
+    }
     if (!ac || acSuggestions.length === 0) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();

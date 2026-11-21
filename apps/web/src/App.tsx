@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { Suspense, lazy, useEffect } from "react";
 
 import { Dock } from "@/components/overlay/Dock";
 import { EditorDrawer } from "@/components/overlay/EditorDrawer";
@@ -6,8 +6,12 @@ import { HomePane } from "@/components/overlay/HomePane";
 import { PagesPanel } from "@/components/overlay/PagesPanel";
 import { SearchPalette } from "@/components/overlay/SearchPalette";
 import { TopBar } from "@/components/overlay/TopBar";
-import { SceneRoot } from "@/components/scene/SceneRoot";
 import { useGalaxy } from "@/stores/galaxy";
+
+// three.js is ~1 MB — keep it out of the boot chunk; the shell paints first
+const SceneRoot = lazy(() =>
+  import("@/components/scene/SceneRoot").then((m) => ({ default: m.SceneRoot })),
+);
 
 function App() {
   const status = useGalaxy((s) => s.status);
@@ -57,7 +61,11 @@ function App() {
         )}
 
         <main className="relative min-w-0 flex-1 overflow-hidden">
-          <SceneRoot />
+          <Suspense fallback={null}>
+            <div className="animate-in fade-in absolute inset-0 duration-1000">
+              <SceneRoot />
+            </div>
+          </Suspense>
           {status === "ready" && <Dock />}
           {/* soft inner vignette + left-edge fade into the home pane */}
           <div className="pointer-events-none absolute inset-0 shadow-[inset_0_0_120px_40px_rgba(3,3,5,0.5)]" />

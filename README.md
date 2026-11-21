@@ -71,11 +71,22 @@ for a ready-to-paste config with this machine's absolute path, or see
 ```
 
 Tools: `search_memory` (Graph-Augmented RAG, optional 1-hop neighbors),
-`save_memory`, `update_memory`, `get_memory_context`, `list_clusters`.
+`save_memory`, `update_memory`, `delete_memory`, `get_memory_context`,
+`list_clusters`.
 Agent writes run the full pipeline — embed, `[[wikilink]]` explicit edges,
 top-5 semantic edges (>0.78 cosine) — with `source: "ai_agent"`. With Supabase
 configured, agent saves appear live in the web UI via `postgres_changes`
 realtime (the migration adds both tables to the publication).
+
+## UI shortcuts
+
+| Keys                  | Action             |
+| --------------------- | ------------------ |
+| `N`                   | new memory         |
+| `/` or `Ctrl/Cmd+K`   | semantic search    |
+| `R`                   | reset camera       |
+| `Ctrl/Cmd+Enter`      | save in editor     |
+| click a cluster label | fly to that sector |
 
 ## Commands
 

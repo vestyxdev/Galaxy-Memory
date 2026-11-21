@@ -8,7 +8,14 @@ import type {
 import { create } from "zustand";
 
 import { getBackend } from "../data/backend";
-import { computePositions, sortClusters, type Vec3 } from "../lib/layout";
+import {
+  RADIUS_MAX,
+  RADIUS_MIN,
+  computePositions,
+  sectorCenterAngle,
+  sortClusters,
+  type Vec3,
+} from "../lib/layout";
 
 export interface GraphSettings {
   showSemanticEdges: boolean;
@@ -26,11 +33,15 @@ const DEFAULT_SETTINGS: GraphSettings = {
 function loadSettings(): GraphSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return DEFAULT_SETTINGS;
-    return { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<GraphSettings>) };
+    if (raw) {
+      return { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<GraphSettings>) };
+    }
   } catch {
-    return DEFAULT_SETTINGS;
+    // fall through to defaults
   }
+  const reduced =
+    typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  return { ...DEFAULT_SETTINGS, autoRotate: !reduced };
 }
 
 interface GalaxyState {
@@ -61,7 +72,7 @@ interface GalaxyState {
   settings: GraphSettings;
 
   /** Incremented to request a camera move — CameraRig watches the tick. */
-  focusRequest: { id: string | null; tick: number };
+  focusRequest: { id: string | null; point: Vec3 | null; tick: number };
 
   backend: MemoryBackend | null;
   embedder: Embedder | null;
@@ -79,6 +90,8 @@ interface GalaxyState {
   setHighlight(ids: Set<string> | null): void;
   toggleSetting(key: keyof GraphSettings): void;
   resetCamera(): void;
+  /** Fly the camera to a cluster's orbital sector. */
+  focusCluster(cluster: string): void;
   saveMemory(input: MemoryInput, id: string | null): Promise<Memory>;
   deleteMemory(id: string): Promise<void>;
 }
@@ -107,7 +120,7 @@ export const useGalaxy = create<GalaxyState>()((set, get) => ({
   editingId: null,
   settings: loadSettings(),
 
-  focusRequest: { id: null, tick: 0 },
+  focusRequest: { id: null, point: null, tick: 0 },
 
   backend: null,
   embedder: null,
@@ -161,7 +174,7 @@ export const useGalaxy = create<GalaxyState>()((set, get) => ({
       editingId: id,
       drawerOpen: true,
       pagesOpen: false,
-      focusRequest: { id, tick: s.focusRequest.tick + 1 },
+      focusRequest: { id, point: null, tick: s.focusRequest.tick + 1 },
     }));
   },
 
@@ -203,7 +216,21 @@ export const useGalaxy = create<GalaxyState>()((set, get) => ({
 
   resetCamera() {
     set((s) => ({
-      focusRequest: { id: null, tick: s.focusRequest.tick + 1 },
+      focusRequest: { id: null, point: null, tick: s.focusRequest.tick + 1 },
+      selectedId: null,
+    }));
+  },
+
+  focusCluster(cluster) {
+    const { clusters } = get();
+    const angle = sectorCenterAngle(clusters, cluster);
+    const r = (RADIUS_MIN + RADIUS_MAX) / 2;
+    set((s) => ({
+      focusRequest: {
+        id: null,
+        point: [Math.cos(angle) * r, 1.35, Math.sin(angle) * r],
+        tick: s.focusRequest.tick + 1,
+      },
       selectedId: null,
     }));
   },
@@ -216,7 +243,7 @@ export const useGalaxy = create<GalaxyState>()((set, get) => ({
     set((s) => ({
       editingId: memory.id,
       selectedId: memory.id,
-      focusRequest: { id: memory.id, tick: s.focusRequest.tick + 1 },
+      focusRequest: { id: memory.id, point: null, tick: s.focusRequest.tick + 1 },
     }));
     return memory;
   },
