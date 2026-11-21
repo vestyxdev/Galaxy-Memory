@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "galaxy-memory": {
+      "command": "node",
+      "args": ["<repo>/packages/mcp-server/dist/index.js"],
+      "env": {
+        "SUPABASE_URL": "https://<project-ref>.supabase.co",
+        "SUPABASE_SERVICE_ROLE_KEY": "<service-role-key>",
+        "EMBEDDING_PROVIDER": "openai",
+        "OPENAI_API_KEY": "sk-..."
+      }
+    }
+  }
+}

@@ -1,15 +1,15 @@
 # Galaxy-Memory task runner — `just --list` shows recipes
 set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 
-# Start the Vite dev server
+# Build shared package, then start the Vite dev server (demo mode works with no env)
 dev:
     npm run dev
 
-# Lint (oxlint)
+# Lint everything (oxlint)
 lint:
     npm run lint
 
-# Typecheck (strict tsc project refs)
+# Typecheck all workspace projects (strict tsc project refs)
 typecheck:
     npx tsc -b
 
@@ -21,6 +21,10 @@ format:
 check: lint typecheck
     npm run build
 
-# Preview the production build locally
+# Start the MCP server locally (builds shared + server first)
+mcp:
+    npm run mcp
+
+# Preview the production web build
 preview:
     npm run preview

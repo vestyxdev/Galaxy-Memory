@@ -3,29 +3,29 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Galaxy-Memory theme — dark-first, calm premium.
-   Light tokens kick in automatically via prefers-color-scheme;
-   .dark class still works if a manual toggle is added later. */
+/* Galaxy-Memory theme — deep-space dark (#050507), calm premium.
+   Light tokens kick in automatically via prefers-color-scheme for the
+   overlay surfaces; the 3D scene stays dark by design. */
 :root {
   --radius: 0.625rem;
-  --background: #070a13;
-  --foreground: #e9ebf4;
-  --card: #0c1120;
-  --card-foreground: #e9ebf4;
-  --popover: #0c1120;
-  --popover-foreground: #e9ebf4;
-  --primary: #8f83f6;
-  --primary-foreground: #070a13;
-  --secondary: #171d33;
-  --secondary-foreground: #c9cede;
-  --muted: #131a2e;
-  --muted-foreground: #8b92ac;
-  --accent: #1c2447;
-  --accent-foreground: #dcd6ff;
+  --background: #050507;
+  --foreground: #eceef4;
+  --card: #0c0c10;
+  --card-foreground: #eceef4;
+  --popover: #0c0c10;
+  --popover-foreground: #eceef4;
+  --primary: #f2f2f5;
+  --primary-foreground: #0a0a0c;
+  --secondary: #16161c;
+  --secondary-foreground: #c9ccd8;
+  --muted: #131318;
+  --muted-foreground: #8b8f9f;
+  --accent: #1d1d26;
+  --accent-foreground: #e2e4ee;
   --destructive: #e5484d;
   --destructive-foreground: #ffffff;
-  --border: #1d2440;
-  --input: #262e52;
+  --border: #1c1c24;
+  --input: #26262f;
   --ring: #8f83f6;
   --chart-1: #8f83f6;
   --chart-2: #5fc8e8;
@@ -42,7 +42,7 @@
     --card-foreground: #1a2033;
     --popover: #ffffff;
     --popover-foreground: #1a2033;
-    --primary: #5b4fd8;
+    --primary: #22242e;
     --primary-foreground: #ffffff;
     --secondary: #eceef7;
     --secondary-foreground: #3d4460;
@@ -98,6 +98,9 @@
   body {
     @apply bg-background text-foreground antialiased;
   }
+  ::selection {
+    background: rgb(255 255 255 / 0.2);
+  }
 }
 
 /* Deterministic CSS starfield — two layers of radial-gradient dots,
@@ -112,4 +115,117 @@
     radial-gradient(1.5px 1.5px at 60% 88%, rgb(147 197 253 / 0.4) 50%, transparent 51%),
     radial-gradient(1px 1px at 8% 58%, rgb(255 255 255 / 0.3) 50%, transparent 51%),
     radial-gradient(1px 1px at 93% 76%, rgb(255 255 255 / 0.35) 50%, transparent 51%);
+}
+
+/* Floating node label rendered by drei's <Html>. */
+.gm-node-label {
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background: rgb(12 12 16 / 0.85);
+  backdrop-filter: blur(6px);
+  color: rgb(255 255 255 / 0.85);
+  font-size: 11px;
+  transform: translateY(-16px);
+}
+.gm-node-label-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Minimal markdown preview — keeps the drawer distraction-free. */
+.gm-markdown {
+  color: rgb(255 255 255 / 0.78);
+  line-height: 1.65;
+}
+.gm-markdown h1,
+.gm-markdown h2,
+.gm-markdown h3 {
+  color: rgb(255 255 255 / 0.92);
+  font-weight: 600;
+  margin: 0.9em 0 0.35em;
+}
+.gm-markdown h1 {
+  font-size: 1.15em;
+}
+.gm-markdown h2 {
+  font-size: 1.05em;
+}
+.gm-markdown h3 {
+  font-size: 0.95em;
+}
+.gm-markdown p {
+  margin: 0.5em 0;
+}
+.gm-markdown ul,
+.gm-markdown ol {
+  margin: 0.5em 0;
+  padding-left: 1.3em;
+}
+.gm-markdown ul {
+  list-style: disc;
+}
+.gm-markdown ol {
+  list-style: decimal;
+}
+.gm-markdown li {
+  margin: 0.15em 0;
+}
+.gm-markdown code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  background: rgb(255 255 255 / 0.08);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+.gm-markdown pre {
+  background: rgb(255 255 255 / 0.06);
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: 8px;
+  padding: 0.7em 0.9em;
+  overflow-x: auto;
+  margin: 0.6em 0;
+}
+.gm-markdown pre code {
+  background: none;
+  padding: 0;
+}
+.gm-markdown a {
+  color: #9db4ff;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.gm-markdown strong {
+  color: rgb(255 255 255 / 0.9);
+  font-weight: 600;
+}
+.gm-markdown blockquote {
+  border-left: 2px solid rgb(255 255 255 / 0.2);
+  padding-left: 0.8em;
+  color: rgb(255 255 255 / 0.55);
+  margin: 0.6em 0;
+}
+.gm-markdown hr {
+  border-color: rgb(255 255 255 / 0.12);
+  margin: 0.9em 0;
+}
+
+/* Thin scrollbars for overlay panels. */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgb(255 255 255 / 0.12);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
 }
