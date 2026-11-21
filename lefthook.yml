@@ -1,0 +1,12 @@
+# Pre-push gate — enforced by the hook, not by convention.
+# Install once per clone: `lefthook install`
+pre-push:
+  commands:
+    lint:
+      run: npm run lint
+    format:
+      run: npm run format:check
+    typecheck:
+      run: npx tsc -b
+    build:
+      run: npm run build

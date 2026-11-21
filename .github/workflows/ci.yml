@@ -1,0 +1,27 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # lint before build — warnings don't fail, errors do
+      - run: npm run lint
+
+      - run: npm run format:check
+
+      # build runs `tsc -b` first, so typecheck is covered here
+      - run: npm run build
