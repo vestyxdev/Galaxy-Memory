@@ -106,3 +106,10 @@ $$;
 -- RLS is intentionally left off: this schema assumes a single-user
 -- self-hosted deployment behind the service/anon keys. Enable and add
 -- policies before exposing it to multiple users.
+
+-- ---------------------------------------------------------------------------
+-- realtime: web UI live-syncs when the MCP server (or any writer) changes
+-- memories/edges. Remove these two lines if you don't want the publication.
+-- ---------------------------------------------------------------------------
+alter publication supabase_realtime add table public.memories;
+alter publication supabase_realtime add table public.memory_edges;

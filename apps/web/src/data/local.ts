@@ -6,6 +6,7 @@ import {
   type MemoryBackend,
 } from "@galaxy-memory/shared";
 
+import { fileBridgeAvailable, createFileBridgeAdapter } from "./file-bridge";
 import { SEED_INPUTS } from "./seed";
 
 const STORAGE_KEY = "galaxy-memory:v1";
@@ -27,24 +28,54 @@ function createLocalStorageAdapter(): KvAdapter {
     async save(state) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     },
+    subscribe(onChange) {
+      // 'storage' fires only in OTHER tabs — cross-tab sync for free
+      const handler = (e: StorageEvent) => {
+        if (e.key === STORAGE_KEY) onChange();
+      };
+      window.addEventListener("storage", handler);
+      return () => window.removeEventListener("storage", handler);
+    },
   };
 }
 
+export interface LocalBackendHandle {
+  backend: MemoryBackend;
+  /** Storage detail for the status popover. */
+  storage: string;
+}
+
+async function seed(backend: MemoryBackend): Promise<void> {
+  for (const input of SEED_INPUTS) {
+    await backend.saveMemory(input);
+  }
+}
+
 /**
- * Demo backend — LocalStorage persistence seeded with 30 sample memories on
- * first run. Seeding goes through saveMemory so the real pipeline produces
- * the demo embeddings + edge graph.
+ * Demo backend selection:
+ * - dev server + bridge middleware up → shared JSON file (~/.galaxy-memory/
+ *   memories.json), the same document the MCP server reads/writes
+ * - otherwise → LocalStorage (production demo, private mode, no middleware)
+ * Seeds 30 sample memories when the chosen storage is empty.
  */
-export async function createLocalBackend(embedder: Embedder): Promise<MemoryBackend> {
+export async function createLocalBackend(embedder: Embedder): Promise<LocalBackendHandle> {
+  if (import.meta.env.DEV && (await fileBridgeAvailable())) {
+    const backend = createKvBackend(createFileBridgeAdapter(), embedder, {
+      label: "Local JSON",
+      semanticThreshold: 0.5,
+    });
+    if ((await backend.listMemories()).length === 0) {
+      await seed(backend);
+    }
+    return { backend, storage: "Local JSON file (shared with MCP server)" };
+  }
+
   const backend = createKvBackend(createLocalStorageAdapter(), embedder, {
     label: "Demo",
     semanticThreshold: 0.5,
   });
-
   if (localStorage.getItem(STORAGE_KEY) === null) {
-    for (const input of SEED_INPUTS) {
-      await backend.saveMemory(input);
-    }
+    await seed(backend);
   }
-  return backend;
+  return { backend, storage: "Browser LocalStorage" };
 }

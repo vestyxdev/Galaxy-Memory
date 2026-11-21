@@ -43,4 +43,12 @@ export interface MemoryBackend {
   /** Remove outgoing edges of a node, optionally narrowed to one edge type. */
   clearOutgoingEdges(id: string, edgeType?: EdgeType): Promise<void>;
   upsertEdge(edge: Omit<MemoryEdge, "id">): Promise<void>;
+
+  /**
+   * Optional live-sync hook: fires when data changes *outside* this
+   * instance (Supabase realtime, another tab/process writing the shared
+   * file). Returns an unsubscribe function. Implementations that cannot
+   * observe external writes leave it undefined.
+   */
+  subscribe?(onChange: () => void): () => void;
 }

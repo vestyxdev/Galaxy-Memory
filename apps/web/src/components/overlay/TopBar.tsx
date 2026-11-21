@@ -1,6 +1,6 @@
 import { BookOpen, Home, SlidersHorizontal } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/overlay/StatusBadge";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useGalaxy, type GraphSettings } from "@/stores/galaxy";
@@ -63,22 +63,19 @@ function ViewSwitcher() {
 
 export function TopBar() {
   const count = useGalaxy((s) => s.memories.length);
-  const mode = useGalaxy((s) => s.mode);
   const setPagesOpen = useGalaxy((s) => s.setPagesOpen);
 
   return (
     <header className="relative z-30 flex h-13 shrink-0 items-center justify-between px-5">
-      <div className="flex items-baseline gap-3">
+      <div className="flex items-center gap-3">
         <h1 className="text-sm font-semibold tracking-tight text-white/90">Galaxy-Memory</h1>
-        <p className="flex items-center gap-2 text-[11px] text-white/35">
+        <div className="flex items-center gap-2 text-[11px] text-white/35">
           <span>
             {count} {count === 1 ? "memory" : "memories"}
           </span>
           <span aria-hidden>·</span>
-          <Badge variant={mode === "demo" ? "outline" : "default"}>
-            {mode === "demo" ? "Demo" : "Supabase"} sync
-          </Badge>
-        </p>
+          <StatusBadge />
+        </div>
       </div>
 
       <div className="absolute left-1/2 -translate-x-1/2">

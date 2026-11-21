@@ -305,5 +305,18 @@ export function createSupabaseBackend(
     },
   };
 
+  // Live sync: any writer (web UI, MCP server, SQL) triggers a refetch.
+  // Requires the tables to be added to the supabase_realtime publication.
+  backend.subscribe = (onChange) => {
+    const channel = client
+      .channel("galaxy-memory:changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "memories" }, onChange)
+      .on("postgres_changes", { event: "*", schema: "public", table: "memory_edges" }, onChange)
+      .subscribe();
+    return () => {
+      void client.removeChannel(channel);
+    };
+  };
+
   return backend;
 }

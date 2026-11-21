@@ -39,6 +39,8 @@ interface GalaxyState {
   mode: "demo" | "supabase";
   backendLabel: string;
   embedderName: string;
+  /** Where data physically lives, for the status popover. */
+  storage: string;
 
   memories: Memory[];
   edges: MemoryEdge[];
@@ -87,6 +89,7 @@ export const useGalaxy = create<GalaxyState>()((set, get) => ({
   mode: "demo",
   backendLabel: "Demo",
   embedderName: "local",
+  storage: "",
 
   memories: [],
   edges: [],
@@ -111,10 +114,25 @@ export const useGalaxy = create<GalaxyState>()((set, get) => ({
 
   async init() {
     try {
-      const { backend, embedder, mode } = await getBackend();
-      set({ backend, embedder, mode, backendLabel: backend.label, embedderName: embedder.name });
+      const { backend, embedder, mode, storage } = await getBackend();
+      set({
+        backend,
+        embedder,
+        mode,
+        storage,
+        backendLabel: backend.label,
+        embedderName: embedder.name,
+      });
       await get().refresh();
       set({ status: "ready" });
+
+      // Live sync: agent/other-tab writes re-flow the galaxy. Debounced —
+      // a single save_memory produces several row changes (memory + edges).
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      backend.subscribe?.(() => {
+        clearTimeout(timer);
+        timer = setTimeout(() => void get().refresh(), 300);
+      });
     } catch (error) {
       set({ status: "error", error: error instanceof Error ? error.message : String(error) });
     }

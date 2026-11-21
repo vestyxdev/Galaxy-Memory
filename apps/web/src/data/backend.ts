@@ -6,6 +6,8 @@ export interface BackendHandle {
   backend: MemoryBackend;
   embedder: Embedder;
   mode: "demo" | "supabase";
+  /** Storage detail for the status popover, e.g. "Local JSON file". */
+  storage: string;
 }
 
 let cached: Promise<BackendHandle> | null = null;
@@ -33,9 +35,15 @@ async function init(): Promise<BackendHandle> {
       import("@galaxy-memory/shared/supabase"),
     ]);
     const client = createClient(env.supabaseUrl, env.supabaseAnonKey);
-    return { backend: createSupabaseBackend(client, embedder), embedder, mode: "supabase" };
+    return {
+      backend: createSupabaseBackend(client, embedder),
+      embedder,
+      mode: "supabase",
+      storage: "Supabase Postgres + pgvector (realtime)",
+    };
   }
 
   const { createLocalBackend } = await import("./local");
-  return { backend: await createLocalBackend(embedder), embedder, mode: "demo" };
+  const local = await createLocalBackend(embedder);
+  return { backend: local.backend, embedder, mode: "demo", storage: local.storage };
 }

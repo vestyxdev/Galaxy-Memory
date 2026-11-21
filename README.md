@@ -23,9 +23,12 @@ npm install
 npm run dev
 ```
 
-With no env vars the app runs in **LocalStorage Demo Mode**, seeded with 30
-interconnected memories across 5 clusters. The MCP server likewise falls back
-to a local JSON file (`~/.galaxy-memory/memories.json`).
+With no env vars the app runs in **Local Demo Mode**, seeded with 30
+interconnected memories across 5 clusters. Under `npm run dev`, a Vite
+middleware (`/api/local-memories`) bridges the web app to the same JSON file
+the MCP server uses (`~/.galaxy-memory/memories.json`) — agent saves appear
+live in the galaxy via a 2.5 s poll. Production demo falls back to
+LocalStorage. Override the file location with `GALAXY_MEMORY_DB`.
 
 ## Supabase mode
 
@@ -51,7 +54,9 @@ self-hosted single-user vault, not for a public deploy.
 npm run build -w @galaxy-memory/shared -w @galaxy-memory/mcp-server
 ```
 
-Register it in your agent client (see `packages/mcp-server/mcp-config.example.json`):
+Register it in your agent client — click the sync badge in the app's top bar
+for a ready-to-paste config with this machine's absolute path, or see
+`packages/mcp-server/mcp-config.example.json`:
 
 ```json
 {
@@ -68,7 +73,9 @@ Register it in your agent client (see `packages/mcp-server/mcp-config.example.js
 Tools: `search_memory` (Graph-Augmented RAG, optional 1-hop neighbors),
 `save_memory`, `update_memory`, `get_memory_context`, `list_clusters`.
 Agent writes run the full pipeline — embed, `[[wikilink]]` explicit edges,
-top-5 semantic edges (>0.78 cosine) — with `source: "ai_agent"`.
+top-5 semantic edges (>0.78 cosine) — with `source: "ai_agent"`. With Supabase
+configured, agent saves appear live in the web UI via `postgres_changes`
+realtime (the migration adds both tables to the publication).
 
 ## Commands
 

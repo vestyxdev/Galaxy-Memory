@@ -17,6 +17,11 @@ export interface KvAdapter {
   /** Return null when nothing is stored yet (first run). */
   load(): Promise<KvState | null>;
   save(state: KvState): Promise<void>;
+  /**
+   * Optional: fires when the underlying document was changed by another
+   * writer (another tab, the MCP server's file writes). Returns unsubscribe.
+   */
+  subscribe?(onChange: () => void): () => void;
 }
 
 export interface KvBackendOptions {
@@ -175,6 +180,16 @@ export function createKvBackend(
       s.edges.push({ id: crypto.randomUUID(), ...edge });
     },
   };
+
+  const adapterSubscribe = adapter.subscribe;
+  if (adapterSubscribe) {
+    backend.subscribe = (onChange) =>
+      adapterSubscribe(() => {
+        // drop the cached snapshot so the next read reloads from storage
+        state = null;
+        onChange();
+      });
+  }
 
   return backend;
 }
