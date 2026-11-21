@@ -10,7 +10,7 @@ import {
 } from "three";
 
 const DISK_INNER = 1.5;
-const DISK_OUTER = 4.6;
+const DISK_OUTER = 5.0;
 
 const DISK_VERT = /* glsl */ `
 varying vec2 vPos;
@@ -21,12 +21,15 @@ void main() {
 `;
 
 // Swirling plasma: differential rotation (inner faster), sine-streak bands,
-// HDR output (>1.0) so the Bloom pass picks the disk up.
+// HDR output (>1.0) so the Bloom pass picks the disk up. Doppler beaming:
+// the side orbiting toward the viewer burns brighter and hotter — the
+// signature Interstellar asymmetry.
 const DISK_FRAG = /* glsl */ `
 varying vec2 vPos;
 uniform float uTime;
 uniform float uInner;
 uniform float uOuter;
+uniform float uBeamAngle;
 
 void main() {
   float r = length(vPos);
@@ -45,9 +48,15 @@ void main() {
   vec3 col = mix(inner, mid, smoothstep(0.0, 0.42, t));
   col = mix(col, outer, smoothstep(0.42, 1.0, t));
 
+  // relativistic beaming — fixed in space, independent of the plasma swirl
+  float beam = 0.5 + 0.5 * cos(angle - uBeamAngle);
+  col = mix(col, vec3(1.0, 0.99, 0.94), beam * 0.3);
+
   float brightness = (2.8 * (1.0 - t * 0.82)) * (0.5 + plasma * 0.95);
+  brightness *= 0.5 + 0.95 * beam;
   float alpha = smoothstep(0.0, 0.05, t) * (1.0 - smoothstep(0.72, 1.0, t));
   alpha *= 0.4 + plasma * 0.6;
+  alpha *= 0.62 + 0.6 * beam;
 
   gl_FragColor = vec4(col * brightness, alpha);
 }
@@ -78,6 +87,7 @@ const DISK_UNIFORMS = {
   uTime: { value: 0 },
   uInner: { value: DISK_INNER },
   uOuter: { value: DISK_OUTER },
+  uBeamAngle: { value: -1.15 },
 };
 
 export function BlackHole() {
@@ -92,9 +102,9 @@ export function BlackHole() {
   });
 
   return (
-    <group rotation={[-0.42, 0, 0.15]}>
+    <group rotation={[-0.3, 0, 0.1]}>
       {/* soft halo behind everything */}
-      <sprite scale={[9.5, 9.5, 1]}>
+      <sprite scale={[11, 11, 1]} raycast={() => null}>
         <spriteMaterial
           map={glow}
           transparent
@@ -105,13 +115,13 @@ export function BlackHole() {
       </sprite>
 
       {/* event horizon — pure black, occludes the far side of the disk */}
-      <mesh>
-        <sphereGeometry args={[1.02, 64, 64]} />
+      <mesh raycast={() => null}>
+        <sphereGeometry args={[1.06, 64, 64]} />
         <meshBasicMaterial color="#000000" />
       </mesh>
 
       {/* photon ring hugging the horizon, in the disk plane */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
         <torusGeometry args={[1.18, 0.022, 10, 160]} />
         <meshBasicMaterial
           color={ARC_COLOR}
@@ -123,7 +133,7 @@ export function BlackHole() {
       </mesh>
 
       {/* lensed disk image — vertical arcs over/under the sphere */}
-      <mesh>
+      <mesh raycast={() => null}>
         <torusGeometry args={[1.32, 0.045, 10, 160, Math.PI]} />
         <meshBasicMaterial
           color={ARC_COLOR}
@@ -133,7 +143,7 @@ export function BlackHole() {
           blending={AdditiveBlending}
         />
       </mesh>
-      <mesh rotation={[0, 0, Math.PI]}>
+      <mesh rotation={[0, 0, Math.PI]} raycast={() => null}>
         <torusGeometry args={[1.32, 0.038, 10, 160, Math.PI]} />
         <meshBasicMaterial
           color={ARC_COLOR_DIM}
@@ -145,7 +155,7 @@ export function BlackHole() {
       </mesh>
 
       {/* accretion disk */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
         <ringGeometry args={[DISK_INNER, DISK_OUTER, 200, 1]} />
         <shaderMaterial
           ref={diskMaterial}

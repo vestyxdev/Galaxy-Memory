@@ -1,13 +1,16 @@
 import { Stars } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
-import { Bloom, EffectComposer } from "@react-three/postprocessing";
+import { Bloom, EffectComposer, Noise, Vignette } from "@react-three/postprocessing";
 
 import { HOME_POSITION } from "../../lib/camera";
 import { useGalaxy } from "../../stores/galaxy";
+import { AmbientDust } from "./AmbientDust";
 import { BlackHole } from "./BlackHole";
 import { CameraRig } from "./CameraRig";
+import { ClusterLabels } from "./ClusterLabels";
 import { GraphEdges } from "./GraphEdges";
 import { GraphNodes } from "./GraphNodes";
+import { NebulaFog } from "./NebulaFog";
 
 export function SceneRoot() {
   const selectedId = useGalaxy((s) => s.selectedId);
@@ -28,13 +31,18 @@ export function SceneRoot() {
       }}
     >
       <color attach="background" args={["#050507"]} />
-      <Stars radius={95} depth={45} count={3800} factor={3.4} saturation={0} fade speed={0.55} />
+      <Stars radius={95} depth={45} count={6500} factor={3.4} saturation={0} fade speed={0.55} />
+      <NebulaFog />
       <BlackHole />
+      <AmbientDust />
       <GraphEdges />
       <GraphNodes />
+      <ClusterLabels />
       <CameraRig />
       <EffectComposer>
         <Bloom mipmapBlur intensity={1.15} luminanceThreshold={0.32} luminanceSmoothing={0.6} />
+        <Noise opacity={0.05} />
+        <Vignette eskil={false} offset={0.28} darkness={0.62} />
       </EffectComposer>
     </Canvas>
   );

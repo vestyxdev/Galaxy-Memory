@@ -16,6 +16,23 @@ export interface GraphSettings {
   autoRotate: boolean;
 }
 
+const SETTINGS_KEY = "gm:settings";
+const DEFAULT_SETTINGS: GraphSettings = {
+  showSemanticEdges: true,
+  showLabels: false,
+  autoRotate: true,
+};
+
+function loadSettings(): GraphSettings {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (!raw) return DEFAULT_SETTINGS;
+    return { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<GraphSettings>) };
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+}
+
 interface GalaxyState {
   status: "loading" | "ready" | "error";
   error: string | null;
@@ -85,7 +102,7 @@ export const useGalaxy = create<GalaxyState>()((set, get) => ({
   settingsOpen: false,
   drawerOpen: false,
   editingId: null,
-  settings: { showSemanticEdges: true, showLabels: false, autoRotate: true },
+  settings: loadSettings(),
 
   focusRequest: { id: null, tick: 0 },
 
@@ -155,7 +172,15 @@ export const useGalaxy = create<GalaxyState>()((set, get) => ({
   },
 
   toggleSetting(key) {
-    set((s) => ({ settings: { ...s.settings, [key]: !s.settings[key] } }));
+    set((s) => {
+      const settings = { ...s.settings, [key]: !s.settings[key] };
+      try {
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+      } catch {
+        // storage unavailable — setting lives in memory only
+      }
+      return { settings };
+    });
   },
 
   resetCamera() {

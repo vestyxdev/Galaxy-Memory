@@ -140,6 +140,29 @@
   flex-shrink: 0;
 }
 
+/* Floating cluster titles — light serif italic, always-on constellation names. */
+.gm-cluster-label {
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  white-space: nowrap;
+  text-align: center;
+}
+.gm-cluster-label-name {
+  font-family: Georgia, "Times New Roman", serif;
+  font-style: italic;
+  font-size: 13px;
+  color: rgb(255 255 255 / 0.5);
+  letter-spacing: 0.02em;
+}
+.gm-cluster-label-count {
+  font-size: 9px;
+  color: rgb(255 255 255 / 0.22);
+  letter-spacing: 0.08em;
+}
+
 /* Minimal markdown preview — keeps the drawer distraction-free. */
 .gm-markdown {
   color: rgb(255 255 255 / 0.78);

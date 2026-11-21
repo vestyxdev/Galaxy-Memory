@@ -21,6 +21,7 @@ function MemoryNode({
   memory,
   position,
   color,
+  radius,
   state,
   isActive,
   showLabel,
@@ -28,6 +29,8 @@ function MemoryNode({
   memory: Memory;
   position: Vec3;
   color: string;
+  /** Base radius — well-connected stars burn bigger. */
+  radius: number;
   state: NodeState;
   /** This node is the hovered/selected one — not just a neighbor. */
   isActive: boolean;
@@ -54,6 +57,7 @@ function MemoryNode({
     <group position={position}>
       <mesh
         ref={meshRef}
+        scale={0.001}
         onPointerOver={(e) => {
           e.stopPropagation();
           setHovered(memory.id);
@@ -68,7 +72,7 @@ function MemoryNode({
           openMemory(memory.id);
         }}
       >
-        <sphereGeometry args={[0.085, 20, 20]} />
+        <sphereGeometry args={[radius, 20, 20]} />
         <meshStandardMaterial
           color="#0b0b12"
           emissive={color}
@@ -77,7 +81,7 @@ function MemoryNode({
           metalness={0}
         />
       </mesh>
-      {(showLabel || isActive) && (
+      {(showLabel || isActive || state === "match") && (
         <Html center distanceFactor={9} zIndexRange={[15, 0]} style={{ pointerEvents: "none" }}>
           <div className="gm-node-label">
             <span className="gm-node-label-dot" style={{ background: color }} />
@@ -109,6 +113,16 @@ export function GraphNodes() {
     return set;
   }, [edges, activeId]);
 
+  // degree centrality — the most connected stars burn a little bigger
+  const degrees = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const e of edges) {
+      map.set(e.source_id, (map.get(e.source_id) ?? 0) + 1);
+      map.set(e.target_id, (map.get(e.target_id) ?? 0) + 1);
+    }
+    return map;
+  }, [edges]);
+
   return (
     <group>
       {memories.map((m) => {
@@ -121,12 +135,15 @@ export function GraphNodes() {
         if (activeId) {
           state = neighbors.has(m.id) ? "lit" : "dim";
         }
+        const degree = degrees.get(m.id) ?? 0;
+        const radius = 0.075 * (1 + (0.45 * Math.min(degree, 8)) / 8);
         return (
           <MemoryNode
             key={m.id}
             memory={m}
             position={position}
             color={clusterColor(m.cluster)}
+            radius={radius}
             state={state}
             isActive={activeId === m.id}
             showLabel={showLabels}

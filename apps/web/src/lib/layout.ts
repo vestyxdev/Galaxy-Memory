@@ -9,6 +9,7 @@ export const CLUSTER_ORDER = [
   "Reference Notes",
   "Ideas",
   "Daily Logs",
+  "Inbox",
   "General",
 ];
 
@@ -18,6 +19,7 @@ const CLUSTER_COLORS: Record<string, string> = {
   "Reference Notes": "#9ff0c0",
   Ideas: "#e3a1ff",
   "Daily Logs": "#ff9c9c",
+  Inbox: "#9fb6ff",
   General: "#d7dae6",
 };
 
@@ -48,9 +50,21 @@ function stableHash(s: string): number {
 }
 
 const SECTOR_SPREAD = 0.68; // fraction of the sector width nodes may occupy
-const RADIUS_MIN = 5.4;
-const RADIUS_MAX = 11.5;
+export const RADIUS_MIN = 5.4;
+export const RADIUS_MAX = 11.5;
 const HEIGHT_JITTER = 1.5;
+
+/** Angular center of a cluster's orbital sector — shared by nodes, dust, labels. */
+export function sectorCenterAngle(clusters: string[], cluster: string): number {
+  const n = Math.max(clusters.length, 1);
+  const sectorWidth = (Math.PI * 2) / n;
+  const ci = Math.max(clusters.indexOf(cluster), 0);
+  return ci * sectorWidth;
+}
+
+export function sectorWidth(clusters: string[]): number {
+  return (Math.PI * 2) / Math.max(clusters.length, 1);
+}
 
 /**
  * Orbital layout: every cluster owns an angular sector; a memory keeps a
@@ -58,17 +72,15 @@ const HEIGHT_JITTER = 1.5;
  */
 export function computePositions(memories: Memory[], clusters: string[]): Record<string, Vec3> {
   const positions: Record<string, Vec3> = {};
-  const n = Math.max(clusters.length, 1);
-  const sectorWidth = (Math.PI * 2) / n;
+  const width = sectorWidth(clusters);
 
   for (const m of memories) {
-    const ci = Math.max(clusters.indexOf(m.cluster), 0);
     const h = stableHash(m.id);
     const h2 = stableHash(`${m.id}:r`);
     const h3 = stableHash(`${m.id}:y`);
 
-    const sectorCenter = ci * sectorWidth;
-    const angle = sectorCenter + (h / 0xffffffff - 0.5) * sectorWidth * SECTOR_SPREAD * 2;
+    const center = sectorCenterAngle(clusters, m.cluster);
+    const angle = center + (h / 0xffffffff - 0.5) * width * SECTOR_SPREAD * 2;
     const radius = RADIUS_MIN + (h2 / 0xffffffff) * (RADIUS_MAX - RADIUS_MIN);
     const y = (h3 / 0xffffffff - 0.5) * HEIGHT_JITTER;
 

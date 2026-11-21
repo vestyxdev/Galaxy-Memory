@@ -1,9 +1,7 @@
-import { BookOpen, Map, SlidersHorizontal } from "lucide-react";
+import { BookOpen, Home, SlidersHorizontal } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { env } from "@/lib/env";
-import { greeting } from "@/lib/greeting";
 import { cn } from "@/lib/utils";
 import { useGalaxy, type GraphSettings } from "@/stores/galaxy";
 
@@ -18,32 +16,31 @@ function ViewSwitcher() {
   const setSettingsOpen = useGalaxy((s) => s.setSettingsOpen);
   const settings = useGalaxy((s) => s.settings);
   const toggleSetting = useGalaxy((s) => s.toggleSetting);
+  const resetCamera = useGalaxy((s) => s.resetCamera);
 
   return (
     <div className="relative">
       <div className="flex items-center gap-1 rounded-full border border-white/10 bg-[#0c0c10]/70 p-1 backdrop-blur-md">
         <button
           type="button"
-          onClick={() => setSettingsOpen(false)}
-          className={cn(
-            "flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
-            !settingsOpen ? "bg-white/10 text-white" : "text-white/50 hover:text-white/80",
-          )}
+          onClick={resetCamera}
+          className="flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium text-white/60 transition-colors hover:text-white"
         >
-          <Map className="size-3.5" />
-          3D Map
+          <Home className="size-3.5" />
+          Home
         </button>
+        <div aria-hidden className="h-3.5 w-px bg-white/10" />
         <button
           type="button"
           onClick={() => setSettingsOpen(!settingsOpen)}
           aria-expanded={settingsOpen}
+          aria-label="Graph settings"
           className={cn(
-            "flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
+            "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
             settingsOpen ? "bg-white/10 text-white" : "text-white/50 hover:text-white/80",
           )}
         >
           <SlidersHorizontal className="size-3.5" />
-          Graph Settings
         </button>
       </div>
 
@@ -70,11 +67,10 @@ export function TopBar() {
   const setPagesOpen = useGalaxy((s) => s.setPagesOpen);
 
   return (
-    <header className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between p-5">
-      <div className="pointer-events-auto">
+    <header className="relative z-30 flex h-13 shrink-0 items-center justify-between px-5">
+      <div className="flex items-baseline gap-3">
         <h1 className="text-sm font-semibold tracking-tight text-white/90">Galaxy-Memory</h1>
-        <p className="mt-0.5 text-xs text-white/45">{greeting(env.userName)}</p>
-        <p className="mt-1.5 flex items-center gap-2 text-[11px] text-white/35">
+        <p className="flex items-center gap-2 text-[11px] text-white/35">
           <span>
             {count} {count === 1 ? "memory" : "memories"}
           </span>
@@ -85,14 +81,14 @@ export function TopBar() {
         </p>
       </div>
 
-      <div className="pointer-events-auto absolute left-1/2 top-5 -translate-x-1/2">
+      <div className="absolute left-1/2 -translate-x-1/2">
         <ViewSwitcher />
       </div>
 
       <button
         type="button"
         onClick={() => setPagesOpen(true)}
-        className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-white/10 bg-[#0c0c10]/70 px-3.5 py-1.5 text-xs font-medium text-white/70 backdrop-blur-md transition-colors hover:bg-white/10 hover:text-white"
+        className="flex items-center gap-1.5 rounded-full border border-white/10 bg-[#0c0c10]/70 px-3.5 py-1.5 text-xs font-medium text-white/70 backdrop-blur-md transition-colors hover:bg-white/10 hover:text-white"
       >
         <BookOpen className="size-3.5" />
         Pages
