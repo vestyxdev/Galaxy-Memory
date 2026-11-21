@@ -43,7 +43,9 @@ function localMemoryApi(): Plugin {
             const body = Buffer.concat(chunks);
             JSON.parse(body.toString("utf8")); // refuse malformed payloads
             await mkdir(dirname(dbPath), { recursive: true });
-            const tmp = `${dbPath}.tmp`;
+            // unique tmp name — the MCP server writes this same file; a shared
+            // .tmp name can interleave concurrent writers into corrupt JSON
+            const tmp = `${dbPath}.${process.pid}.${crypto.randomUUID().slice(0, 8)}.tmp`;
             await writeFile(tmp, body);
             await rename(tmp, dbPath);
             res.statusCode = 204;

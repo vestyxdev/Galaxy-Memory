@@ -27,6 +27,11 @@ export function PagesPanel() {
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto px-4 py-3">
+          {memories.length === 0 && (
+            <p className="px-1 py-6 text-center text-xs text-white/35">
+              Nothing captured yet — press N to write your first memory.
+            </p>
+          )}
           {clusters.map((cluster) => (
             <section key={cluster} className="mb-5">
               <h2 className="mb-1.5 flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-white/40">

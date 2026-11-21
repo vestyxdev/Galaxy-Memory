@@ -24,6 +24,7 @@ export function HomePane() {
   const [lastVisit] = useState<number | null>(readLastVisit);
   const [draft, setDraft] = useState(readDraft);
   const [saving, setSaving] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const saveMemory = useGalaxy((s) => s.saveMemory);
@@ -56,11 +57,14 @@ export function HomePane() {
     const content = draft.trim();
     if (!content || saving) return;
     setSaving(true);
+    setFileError(null);
     try {
       const firstLine = content.split("\n").find((l) => l.trim().length > 0) ?? "";
       const title = firstLine.replace(/^#+\s*/, "").slice(0, 60) || "Scratch note";
       await saveMemory({ title, content, cluster: "Inbox", tags: ["scratchpad"] }, null);
       saveDraft("");
+    } catch (error) {
+      setFileError(error instanceof Error ? error.message : String(error));
     } finally {
       setSaving(false);
     }
@@ -122,7 +126,9 @@ export function HomePane() {
         </div>
 
         <div className="mt-4 flex items-center justify-between text-[11px] text-white/30">
-          <span>autosaved locally</span>
+          <span className={fileError ? "truncate text-red-300/80" : ""} title={fileError ?? ""}>
+            {fileError ?? "autosaved locally"}
+          </span>
           <button
             type="button"
             onClick={() => void fileAsMemory()}

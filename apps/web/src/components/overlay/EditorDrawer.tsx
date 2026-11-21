@@ -98,6 +98,7 @@ function EditorForm({ memory }: { memory: Memory | undefined }) {
   const [tags, setTags] = useState(memory?.tags.join(", ") ?? "");
   const [view, setView] = useState<"write" | "preview">("write");
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [ac, setAc] = useState<LinkAc | null>(null);
   const [acIndex, setAcIndex] = useState(0);
@@ -183,6 +184,7 @@ function EditorForm({ memory }: { memory: Memory | undefined }) {
   const save = async () => {
     if (!title.trim() || !content.trim()) return;
     setSaving(true);
+    setSaveError(null);
     try {
       await saveMemory(
         {
@@ -194,6 +196,8 @@ function EditorForm({ memory }: { memory: Memory | undefined }) {
         },
         editingId,
       );
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : String(error));
     } finally {
       setSaving(false);
     }
@@ -378,6 +382,11 @@ function EditorForm({ memory }: { memory: Memory | undefined }) {
             <Trash2 className="size-3.5" />
             {confirmDelete ? "Confirm delete" : "Delete"}
           </Button>
+        )}
+        {saveError && (
+          <span className="min-w-0 flex-1 truncate text-[11px] text-red-300/80" title={saveError}>
+            {saveError}
+          </span>
         )}
         <div className="flex-1" />
         <Button type="button" variant="ghost" size="sm" onClick={closeDrawer}>

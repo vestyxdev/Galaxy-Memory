@@ -1,5 +1,5 @@
 import { useFrame } from "@react-three/fiber";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   AdditiveBlending,
   CanvasTexture,
@@ -92,6 +92,7 @@ const DISK_UNIFORMS = {
 
 export function BlackHole() {
   const glow = useMemo(() => makeGlowTexture(), []);
+  useEffect(() => () => glow.dispose(), [glow]);
   const diskMaterial = useRef<ShaderMaterial>(null);
 
   useFrame(({ clock }) => {

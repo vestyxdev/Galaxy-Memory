@@ -1,5 +1,5 @@
 import { useFrame } from "@react-three/fiber";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { AdditiveBlending, CanvasTexture, SRGBColorSpace, Sprite } from "three";
 
 /** Blotchy smoke puff: several overlapping soft gradients on one canvas. */
@@ -53,6 +53,12 @@ const SPRITES: FogSprite[] = [
  */
 export function NebulaFog() {
   const textures = useMemo(() => [makeFogTexture(11), makeFogTexture(29)], []);
+  useEffect(
+    () => () => {
+      for (const t of textures) t.dispose();
+    },
+    [textures],
+  );
   const spriteRefs = useRef<(Sprite | null)[]>([]);
 
   useFrame((_, delta) => {

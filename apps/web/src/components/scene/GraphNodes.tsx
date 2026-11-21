@@ -1,6 +1,6 @@
 import { Html } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Mesh, MeshStandardMaterial } from "three";
 
 import type { Memory } from "@galaxy-memory/shared";
@@ -39,6 +39,15 @@ function MemoryNode({
   const meshRef = useRef<Mesh>(null);
   const setHovered = useGalaxy((s) => s.setHovered);
   const openMemory = useGalaxy((s) => s.openMemory);
+
+  // unmounting mid-hover (e.g. the node was deleted) must not leave the
+  // pointer cursor stuck on the body
+  useEffect(
+    () => () => {
+      document.body.style.cursor = "";
+    },
+    [],
+  );
 
   useFrame(({ clock }) => {
     const mesh = meshRef.current;

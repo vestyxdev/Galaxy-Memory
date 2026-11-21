@@ -44,6 +44,9 @@ function loadSettings(): GraphSettings {
   return { ...DEFAULT_SETTINGS, autoRotate: !reduced };
 }
 
+/** Outside the store: the active backend subscription, so re-init tears it down. */
+let backendUnsubscribe: (() => void) | undefined;
+
 interface GalaxyState {
   status: "loading" | "ready" | "error";
   error: string | null;
@@ -149,8 +152,10 @@ export const useGalaxy = create<GalaxyState>()((set, get) => ({
 
       // Live sync: agent/other-tab writes re-flow the galaxy. Debounced —
       // a single save_memory produces several row changes (memory + edges).
+      // Tear down any previous subscription first (StrictMode re-invokes init).
+      backendUnsubscribe?.();
       let timer: ReturnType<typeof setTimeout> | undefined;
-      backend.subscribe?.(() => {
+      backendUnsubscribe = backend.subscribe?.(() => {
         clearTimeout(timer);
         // transient poll/realtime failures shouldn't take down a working UI
         timer = setTimeout(

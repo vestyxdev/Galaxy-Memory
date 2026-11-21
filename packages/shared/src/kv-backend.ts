@@ -30,7 +30,7 @@ export interface KvBackendOptions {
   semanticThreshold?: number;
 }
 
-const EMPTY: KvState = { memories: [], edges: [] };
+const emptyState = (): KvState => ({ memories: [], edges: [] });
 
 /**
  * Full MemoryBackend over an opaque KV adapter: embeds on write, keeps the
@@ -46,7 +46,8 @@ export function createKvBackend(
   let state: KvState | null = null;
 
   async function load(): Promise<KvState> {
-    if (!state) state = (await adapter.load()) ?? EMPTY;
+    // never hand out a shared EMPTY object — callers mutate it in place
+    if (!state) state = (await adapter.load()) ?? emptyState();
     return state;
   }
 
@@ -86,8 +87,11 @@ export function createKvBackend(
     },
 
     async saveMemory(input) {
-      const s = await load();
+      // Embed BEFORE touching the cached snapshot — subscribe() invalidates
+      // `state` on external writes, and any snapshot captured before this
+      // await would be stale by persist time.
       const embedding = await embedMemoryText(embedder, input.title, input.content);
+      const s = await load();
       const now = new Date().toISOString();
       const memory: Memory = {
         id: crypto.randomUUID(),
@@ -108,23 +112,31 @@ export function createKvBackend(
     },
 
     async updateMemory(id, patch) {
+      const snapshot = await load();
+      const before = snapshot.memories.find((m) => m.id === id);
+      if (!before) throw new Error(`Memory ${id} not found`);
+
+      const title = patch.title ?? before.title;
+      const content = patch.content ?? before.content;
+      const reembed = title !== before.title || content !== before.content;
+      const embedding =
+        reembed || !before.embedding
+          ? await embedMemoryText(embedder, title, content)
+          : before.embedding;
+
+      // The snapshot may have been invalidated while the embed awaited —
+      // re-load so the patch lands on top of any external write.
       const s = await load();
       const current = s.memories.find((m) => m.id === id);
-      if (!current) throw new Error(`Memory ${id} not found`);
-
-      const title = patch.title ?? current.title;
-      const content = patch.content ?? current.content;
-      const reembed = title !== current.title || content !== current.content;
+      if (!current) throw new Error(`Memory ${id} was deleted during update`);
 
       current.title = title;
       current.content = content;
       if (patch.summary !== undefined) current.summary = patch.summary;
       if (patch.cluster !== undefined) current.cluster = patch.cluster;
       if (patch.tags !== undefined) current.tags = patch.tags;
+      current.embedding = embedding;
       current.updated_at = new Date().toISOString();
-      if (reembed || !current.embedding) {
-        current.embedding = await embedMemoryText(embedder, title, content);
-      }
       if (reembed) await syncMemoryEdges(backend, current, threshold);
       await persist();
       return current;

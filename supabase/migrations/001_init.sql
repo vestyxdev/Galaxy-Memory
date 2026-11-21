@@ -111,5 +111,18 @@ $$;
 -- realtime: web UI live-syncs when the MCP server (or any writer) changes
 -- memories/edges. Remove these two lines if you don't want the publication.
 -- ---------------------------------------------------------------------------
-alter publication supabase_realtime add table public.memories;
-alter publication supabase_realtime add table public.memory_edges;
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'memories'
+  ) then
+    alter publication supabase_realtime add table public.memories;
+  end if;
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'memory_edges'
+  ) then
+    alter publication supabase_realtime add table public.memory_edges;
+  end if;
+end $$;

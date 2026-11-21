@@ -113,6 +113,27 @@ const MEMORY_COLS = "id,title,content,summary,cluster,tags,source,created_at,upd
 /** What MEMORY_COLS selects — the full row minus the embedding vector. */
 type ListedMemoryRow = Omit<MemoryRow, "embedding">;
 
+interface Page<T> {
+  data: T[] | null;
+  error: { message: string } | null;
+}
+
+/**
+ * PostgREST caps responses at 1000 rows — every list read paginates through
+ * this so the graph doesn't silently truncate as the vault grows.
+ */
+async function fetchAll<T>(page: (from: number, to: number) => PromiseLike<Page<T>>): Promise<T[]> {
+  const SIZE = 1000;
+  const out: T[] = [];
+  for (let from = 0; ; from += SIZE) {
+    const { data, error } = await page(from, from + SIZE - 1);
+    if (error) throw new Error(error.message);
+    const rows = data ?? [];
+    out.push(...rows);
+    if (rows.length < SIZE) return out;
+  }
+}
+
 function toMemory(row: MatchRow | ListedMemoryRow): Memory {
   return {
     id: row.id,
@@ -152,25 +173,30 @@ export function createSupabaseBackend(
     label: "Supabase",
 
     async listMemories() {
-      const { data, error } = await client
-        .from("memories")
-        .select(MEMORY_COLS)
-        .order("created_at", { ascending: true });
-      if (error) throw new Error(error.message);
-      return (data ?? []).map(toMemory);
+      const rows = await fetchAll((from, to) =>
+        client
+          .from("memories")
+          .select(MEMORY_COLS)
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, to),
+      );
+      return rows.map(toMemory);
     },
 
     async listEdges() {
-      const { data, error } = await client.from("memory_edges").select("*");
-      if (error) throw new Error(error.message);
-      return (data ?? []).map(toEdge);
+      const rows = await fetchAll((from, to) =>
+        client.from("memory_edges").select("*").order("id").range(from, to),
+      );
+      return rows.map(toEdge);
     },
 
     async listClusters() {
-      const { data, error } = await client.from("memories").select("cluster");
-      if (error) throw new Error(error.message);
+      const data = await fetchAll((from, to) =>
+        client.from("memories").select("cluster").order("id").range(from, to),
+      );
       const counts = new Map<string, number>();
-      for (const row of data ?? []) {
+      for (const row of data) {
         counts.set(row.cluster, (counts.get(row.cluster) ?? 0) + 1);
       }
       return [...counts.entries()]
@@ -189,14 +215,14 @@ export function createSupabaseBackend(
     },
 
     async findMemoryByTitle(title) {
-      const { data, error } = await client
-        .from("memories")
-        .select(MEMORY_COLS)
-        .ilike("title", title)
-        .limit(1)
-        .maybeSingle();
-      if (error) throw new Error(error.message);
-      return data ? toMemory(data) : null;
+      // PostgREST ilike treats %, _ and * in the value as wildcards and can't
+      // express a literal match — filter client-side for an exact ci-match.
+      const needle = title.trim().toLowerCase();
+      const rows = await fetchAll((from, to) =>
+        client.from("memories").select(MEMORY_COLS).order("id").range(from, to),
+      );
+      const row = rows.find((r) => r.title.trim().toLowerCase() === needle);
+      return row ? toMemory(row) : null;
     },
 
     async saveMemory(input) {
@@ -251,7 +277,10 @@ export function createSupabaseBackend(
       if (error) throw new Error(error.message);
 
       const memory = { ...toMemory(data), embedding };
-      if (reembed || patch.title !== undefined || patch.content !== undefined) {
+      // Resync edges only when text actually changed — running it on a
+      // metadata-only update would clear outgoing edges while memory.embedding
+      // is null here, permanently deleting the node's semantic connections.
+      if (reembed) {
         await syncMemoryEdges(backend, memory);
       }
       return memory;

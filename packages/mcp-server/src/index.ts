@@ -134,8 +134,11 @@ async function main() {
         "Save a new memory: embeds it, stores it, resolves [[wikilinks]] into explicit " +
         "edges, and attaches semantic edges to its nearest neighbors.",
       inputSchema: {
-        title: z.string().min(1),
-        content: z.string().min(1).describe("Markdown body; [[Other Title]] creates edges"),
+        title: z.string().trim().min(1),
+        content: z
+          .string()
+          .refine((s) => s.trim().length > 0, "content must not be blank")
+          .describe("Markdown body; [[Other Title]] creates edges"),
         cluster: z.string().optional().describe("Defaults to 'General'"),
         tags: z.array(z.string()).optional(),
       },
@@ -173,15 +176,25 @@ async function main() {
         "title or content changed.",
       inputSchema: {
         id: z.string().uuid(),
-        title: z.string().min(1).optional(),
-        content: z.string().min(1).optional(),
+        title: z.string().trim().min(1).optional(),
+        content: z
+          .string()
+          .refine((s) => s.trim().length > 0, "content must not be blank")
+          .optional(),
+        summary: z.string().nullable().optional().describe("One-line summary; null clears it"),
         cluster: z.string().optional(),
         tags: z.array(z.string()).optional(),
       },
     },
-    async ({ id, title, content, cluster, tags }) => {
+    async ({ id, title, content, summary, cluster, tags }) => {
       try {
-        const memory = await backend.updateMemory(id, { title, content, cluster, tags });
+        const memory = await backend.updateMemory(id, {
+          title,
+          content,
+          summary,
+          cluster,
+          tags,
+        });
         return ok(summarize(memory));
       } catch (error) {
         return fail(error);
