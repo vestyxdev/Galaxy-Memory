@@ -31,6 +31,26 @@ export function clusterColor(cluster: string): string {
   return FALLBACK_COLORS[stableHash(cluster) % FALLBACK_COLORS.length]!;
 }
 
+/** Crisp warm-white starlight — the cohesive node palette. */
+const STAR_WHITE = "#fff4e0";
+
+function lerpHex(a: string, b: string, t: number): string {
+  const pa = parseInt(a.slice(1), 16);
+  const pb = parseInt(b.slice(1), 16);
+  const r = Math.round(((pa >> 16) & 255) * (1 - t) + ((pb >> 16) & 255) * t);
+  const g = Math.round(((pa >> 8) & 255) * (1 - t) + ((pb >> 8) & 255) * t);
+  const bl = Math.round((pa & 255) * (1 - t) + (pb & 255) * t);
+  return `#${((r << 16) | (g << 8) | bl).toString(16).padStart(6, "0")}`;
+}
+
+/**
+ * Node color: mostly starlight, a whisper of cluster hue (32%) — nodes read
+ * as monochrome stars while clusters stay faintly distinguishable.
+ */
+export function nodeColor(cluster: string): string {
+  return lerpHex(STAR_WHITE, clusterColor(cluster), 0.32);
+}
+
 /** Sorted, deduped cluster list: preferred order first, extras alphabetical. */
 export function sortClusters(memories: Memory[]): string[] {
   const set = new Set(memories.map((m) => m.cluster));

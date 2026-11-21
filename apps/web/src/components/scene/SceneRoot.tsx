@@ -30,7 +30,7 @@ export function SceneRoot() {
         if (selectedId) useGalaxy.setState({ selectedId: null });
       }}
     >
-      <color attach="background" args={["#050507"]} />
+      <color attach="background" args={["#030305"]} />
       <Stars radius={95} depth={45} count={6500} factor={3.4} saturation={0} fade speed={0.55} />
       <NebulaFog />
       <BlackHole />

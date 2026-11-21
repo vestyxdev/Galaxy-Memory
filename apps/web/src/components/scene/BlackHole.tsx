@@ -114,19 +114,20 @@ export function BlackHole() {
         />
       </sprite>
 
-      {/* event horizon — pure black, occludes the far side of the disk */}
+      {/* event horizon — pure black, occludes the far side of the disk.
+          toneMapped: no tone-mapping lift — the sphere must stay #000000. */}
       <mesh raycast={() => null}>
         <sphereGeometry args={[1.06, 64, 64]} />
-        <meshBasicMaterial color="#000000" />
+        <meshBasicMaterial color="#000000" toneMapped={false} />
       </mesh>
 
       {/* photon ring hugging the horizon, in the disk plane */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
-        <torusGeometry args={[1.18, 0.022, 10, 160]} />
+        <torusGeometry args={[1.18, 0.014, 10, 160]} />
         <meshBasicMaterial
           color={ARC_COLOR}
           transparent
-          opacity={0.95}
+          opacity={0.78}
           toneMapped={false}
           blending={AdditiveBlending}
         />
@@ -134,21 +135,21 @@ export function BlackHole() {
 
       {/* lensed disk image — vertical arcs over/under the sphere */}
       <mesh raycast={() => null}>
-        <torusGeometry args={[1.32, 0.045, 10, 160, Math.PI]} />
+        <torusGeometry args={[1.32, 0.032, 10, 160, Math.PI]} />
         <meshBasicMaterial
           color={ARC_COLOR}
           transparent
-          opacity={0.85}
+          opacity={0.68}
           toneMapped={false}
           blending={AdditiveBlending}
         />
       </mesh>
       <mesh rotation={[0, 0, Math.PI]} raycast={() => null}>
-        <torusGeometry args={[1.32, 0.038, 10, 160, Math.PI]} />
+        <torusGeometry args={[1.32, 0.026, 10, 160, Math.PI]} />
         <meshBasicMaterial
           color={ARC_COLOR_DIM}
           transparent
-          opacity={0.7}
+          opacity={0.48}
           toneMapped={false}
           blending={AdditiveBlending}
         />

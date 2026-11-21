@@ -46,7 +46,7 @@ function App() {
   }, []);
 
   return (
-    <div className="fixed inset-0 flex flex-col overflow-hidden bg-[#050507] text-white">
+    <div className="fixed inset-0 flex flex-col overflow-hidden bg-[#030305] text-white">
       {status === "ready" && <TopBar />}
 
       <div className="flex min-h-0 flex-1">
@@ -56,11 +56,12 @@ function App() {
           </aside>
         )}
 
-        <main className="relative min-w-0 flex-1 overflow-hidden md:m-2.5 md:ml-0 md:rounded-2xl md:border md:border-white/10">
+        <main className="relative min-w-0 flex-1 overflow-hidden">
           <SceneRoot />
           {status === "ready" && <Dock />}
-          {/* soft inner vignette over the viewport edges */}
-          <div className="pointer-events-none absolute inset-0 shadow-[inset_0_0_120px_40px_rgba(5,5,7,0.55)]" />
+          {/* soft inner vignette + left-edge fade into the home pane */}
+          <div className="pointer-events-none absolute inset-0 shadow-[inset_0_0_120px_40px_rgba(3,3,5,0.5)]" />
+          <div className="pointer-events-none absolute inset-y-0 left-0 w-36 bg-gradient-to-r from-[#030305] via-[#030305]/50 to-transparent" />
         </main>
       </div>
 

@@ -15,8 +15,8 @@ import { useGalaxy } from "../../stores/galaxy";
 // additive blending: brightness does the dimming, not alpha
 const EXPLICIT_RGB: Vec3 = [0.75, 0.78, 0.9];
 const SEMANTIC_RGB: Vec3 = [0.5, 0.42, 0.85];
-const LIT_BOOST = 2.2;
-const DIM_FACTOR = 0.12;
+const LIT_BOOST = 4.0;
+const DIM_FACTOR = 0.04;
 const CURVE_SEGMENTS = 22;
 
 const UP = new Vector3(0, 1, 0);
@@ -115,7 +115,7 @@ export function GraphEdges() {
         <lineBasicMaterial
           vertexColors
           transparent
-          opacity={0.42}
+          opacity={0.12}
           depthWrite={false}
           blending={AdditiveBlending}
         />
@@ -124,7 +124,7 @@ export function GraphEdges() {
         <lineBasicMaterial
           vertexColors
           transparent
-          opacity={0.2}
+          opacity={0.06}
           depthWrite={false}
           blending={AdditiveBlending}
         />

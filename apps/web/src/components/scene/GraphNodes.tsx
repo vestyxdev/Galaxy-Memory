@@ -5,16 +5,16 @@ import { Mesh, MeshStandardMaterial } from "three";
 
 import type { Memory } from "@galaxy-memory/shared";
 
-import { clusterColor, type Vec3 } from "../../lib/layout";
+import { nodeColor, type Vec3 } from "../../lib/layout";
 import { useGalaxy } from "../../stores/galaxy";
 
 type NodeState = "idle" | "lit" | "dim" | "match";
 
 const TARGET_INTENSITY: Record<NodeState, number> = {
-  idle: 1.25,
-  lit: 2.8,
-  dim: 0.18,
-  match: 3.2,
+  idle: 1.3,
+  lit: 3.6,
+  dim: 0.14,
+  match: 3.8,
 };
 
 function MemoryNode({
@@ -44,7 +44,7 @@ function MemoryNode({
     const mesh = meshRef.current;
     if (!mesh) return;
     const pulse = state === "match" ? Math.sin(clock.elapsedTime * 5 + position[0]) * 0.6 : 0;
-    const target = TARGET_INTENSITY[state] + pulse;
+    const target = TARGET_INTENSITY[state] + pulse + (isActive ? 0.9 : 0);
     const mat = mesh.material;
     if (mat instanceof MeshStandardMaterial) {
       mat.emissiveIntensity += (target - mat.emissiveIntensity) * 0.15;
@@ -136,13 +136,13 @@ export function GraphNodes() {
           state = neighbors.has(m.id) ? "lit" : "dim";
         }
         const degree = degrees.get(m.id) ?? 0;
-        const radius = 0.075 * (1 + (0.45 * Math.min(degree, 8)) / 8);
+        const radius = 0.062 * (1 + (0.45 * Math.min(degree, 8)) / 8);
         return (
           <MemoryNode
             key={m.id}
             memory={m}
             position={position}
-            color={clusterColor(m.cluster)}
+            color={nodeColor(m.cluster)}
             radius={radius}
             state={state}
             isActive={activeId === m.id}
