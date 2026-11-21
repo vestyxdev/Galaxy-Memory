@@ -52,6 +52,8 @@ interface GalaxyState {
   embedderName: string;
   /** Where data physically lives, for the status popover. */
   storage: string;
+  /** Timestamp of the last completed graph refresh (live-sync heartbeat). */
+  lastSyncAt: number | null;
 
   memories: Memory[];
   edges: MemoryEdge[];
@@ -69,6 +71,8 @@ interface GalaxyState {
   drawerOpen: boolean;
   /** Memory being edited; null = creating a new one. */
   editingId: string | null;
+  /** Prefilled title for a new memory (e.g. from an unresolved [[wikilink]]). */
+  draftTitle: string | null;
   settings: GraphSettings;
 
   /** Incremented to request a camera move — CameraRig watches the tick. */
@@ -82,8 +86,10 @@ interface GalaxyState {
   setHovered(id: string | null): void;
   /** Select a node, fly the camera to it, and open the editor drawer. */
   openMemory(id: string): void;
-  openNewMemory(): void;
+  openNewMemory(titleSeed?: string): void;
   closeDrawer(): void;
+  /** Deselect the active node (Esc / pointer-miss). */
+  clearSelection(): void;
   setPagesOpen(open: boolean): void;
   setSearchOpen(open: boolean): void;
   setSettingsOpen(open: boolean): void;
@@ -103,6 +109,7 @@ export const useGalaxy = create<GalaxyState>()((set, get) => ({
   backendLabel: "Demo",
   embedderName: "local",
   storage: "",
+  lastSyncAt: null,
 
   memories: [],
   edges: [],
@@ -118,6 +125,7 @@ export const useGalaxy = create<GalaxyState>()((set, get) => ({
   settingsOpen: false,
   drawerOpen: false,
   editingId: null,
+  draftTitle: null,
   settings: loadSettings(),
 
   focusRequest: { id: null, point: null, tick: 0 },
@@ -144,7 +152,14 @@ export const useGalaxy = create<GalaxyState>()((set, get) => ({
       let timer: ReturnType<typeof setTimeout> | undefined;
       backend.subscribe?.(() => {
         clearTimeout(timer);
-        timer = setTimeout(() => void get().refresh(), 300);
+        // transient poll/realtime failures shouldn't take down a working UI
+        timer = setTimeout(
+          () =>
+            void get()
+              .refresh()
+              .catch(() => {}),
+          300,
+        );
       });
     } catch (error) {
       set({ status: "error", error: error instanceof Error ? error.message : String(error) });
@@ -161,6 +176,7 @@ export const useGalaxy = create<GalaxyState>()((set, get) => ({
       edges,
       clusters,
       positions: computePositions(memories, clusters),
+      lastSyncAt: Date.now(),
     });
   },
 
@@ -178,12 +194,22 @@ export const useGalaxy = create<GalaxyState>()((set, get) => ({
     }));
   },
 
-  openNewMemory() {
-    set({ editingId: null, drawerOpen: true, pagesOpen: false, searchOpen: false });
+  openNewMemory(titleSeed) {
+    set({
+      editingId: null,
+      draftTitle: titleSeed ?? null,
+      drawerOpen: true,
+      pagesOpen: false,
+      searchOpen: false,
+    });
   },
 
   closeDrawer() {
-    set({ drawerOpen: false, editingId: null });
+    set({ drawerOpen: false, editingId: null, draftTitle: null });
+  },
+
+  clearSelection() {
+    set({ selectedId: null });
   },
 
   setPagesOpen(open) {

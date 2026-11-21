@@ -57,6 +57,7 @@ export function EditorDrawer() {
   const open = useGalaxy((s) => s.drawerOpen);
   const closeDrawer = useGalaxy((s) => s.closeDrawer);
   const editingId = useGalaxy((s) => s.editingId);
+  const draftTitle = useGalaxy((s) => s.draftTitle);
   const memories = useGalaxy((s) => s.memories);
 
   const memory = editingId ? memories.find((m) => m.id === editingId) : undefined;
@@ -73,7 +74,7 @@ export function EditorDrawer() {
           </SheetDescription>
         </SheetHeader>
         {/* key remounts the form per target — no sync effect needed */}
-        <EditorForm key={editingId ?? "new"} memory={memory} />
+        <EditorForm key={editingId ?? draftTitle ?? "new"} memory={memory} />
       </SheetContent>
     </Sheet>
   );
@@ -88,8 +89,10 @@ function EditorForm({ memory }: { memory: Memory | undefined }) {
   const deleteMemory = useGalaxy((s) => s.deleteMemory);
   const closeDrawer = useGalaxy((s) => s.closeDrawer);
   const openMemory = useGalaxy((s) => s.openMemory);
+  const openNewMemory = useGalaxy((s) => s.openNewMemory);
+  const draftTitle = useGalaxy((s) => s.draftTitle);
 
-  const [title, setTitle] = useState(memory?.title ?? "");
+  const [title, setTitle] = useState(memory?.title ?? draftTitle ?? "");
   const [content, setContent] = useState(memory?.content ?? "");
   const [cluster, setCluster] = useState(memory?.cluster ?? "");
   const [tags, setTags] = useState(memory?.tags.join(", ") ?? "");
@@ -197,9 +200,31 @@ function EditorForm({ memory }: { memory: Memory | undefined }) {
   };
 
   const previewHtml = useMemo(
-    () => (view === "preview" ? marked.parse(content, { async: false }) : ""),
+    () =>
+      view === "preview"
+        ? marked.parse(
+            // [[Title]] renders as a clickable link in preview mode
+            content.replace(
+              /\[\[([^\]]+)\]\]/g,
+              (_, t: string) => `[${t}](gm://memory/${encodeURIComponent(t)})`,
+            ),
+            { async: false },
+          )
+        : "",
     [view, content],
   );
+
+  // preview clicks on gm:// links → open the memory (or start a new one)
+  const onPreviewClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const a = e.target instanceof HTMLElement ? e.target.closest("a") : null;
+    const href = a?.getAttribute("href");
+    if (!href?.startsWith("gm://memory/")) return;
+    e.preventDefault();
+    const target = decodeURIComponent(href.slice("gm://memory/".length));
+    const found = memories.find((m) => m.title === target);
+    if (found) openMemory(found.id);
+    else openNewMemory(target);
+  };
 
   return (
     <>
@@ -297,6 +322,7 @@ function EditorForm({ memory }: { memory: Memory | undefined }) {
           ) : (
             <div
               className="gm-markdown h-full min-h-[240px] overflow-y-auto rounded-md border border-white/10 bg-white/[0.03] px-4 py-3 text-sm"
+              onClick={onPreviewClick}
               // SAFETY: content is authored by the local user in this same app;
               // marked output is rendered unmodified as the preview contract.
               dangerouslySetInnerHTML={{ __html: previewHtml }}

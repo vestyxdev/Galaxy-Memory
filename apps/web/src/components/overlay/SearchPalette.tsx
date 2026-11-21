@@ -1,6 +1,6 @@
 import { FileText, Search } from "lucide-react";
 import * as React from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { MemoryMatch } from "@galaxy-memory/shared";
 
@@ -29,6 +29,17 @@ export function SearchPalette() {
   const [results, setResults] = useState<Result[]>([]);
   const [active, setActive] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
+
+  // empty query → recent captures so the palette is useful before typing
+  const recent = useMemo<Result[]>(
+    () =>
+      [...memories]
+        .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))
+        .slice(0, 6)
+        .map((m) => ({ match: { ...m, similarity: 0 }, keyword: false })),
+    [memories],
+  );
+  const list = query.trim() ? results : recent;
 
   // semantic + keyword merge; matching nodes light up in the scene as you type
   useEffect(() => {
@@ -93,12 +104,12 @@ export function SearchPalette() {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       const next =
-        e.key === "ArrowDown" ? Math.min(active + 1, results.length - 1) : Math.max(active - 1, 0);
+        e.key === "ArrowDown" ? Math.min(active + 1, list.length - 1) : Math.max(active - 1, 0);
       setActive(next);
-      setHovered(results[next]?.match.id ?? null);
-    } else if (e.key === "Enter" && results[active]) {
+      setHovered(list[next]?.match.id ?? null);
+    } else if (e.key === "Enter" && list[active]) {
       e.preventDefault();
-      pick(results[active].match.id);
+      pick(list[active].match.id);
     }
   };
 
@@ -150,11 +161,18 @@ export function SearchPalette() {
             </p>
           )}
           {!query.trim() && (
-            <p className="px-3 py-6 text-center text-xs text-white/35">
-              Type to search by meaning — matching stars light up in the galaxy.
-            </p>
+            <>
+              <p className="px-3 pb-1 pt-2 text-[10px] uppercase tracking-[0.14em] text-white/25">
+                Recent captures
+              </p>
+              {recent.length === 0 && (
+                <p className="px-3 py-6 text-center text-xs text-white/35">
+                  No memories yet — press N to capture one.
+                </p>
+              )}
+            </>
           )}
-          {results.map((r, i) => (
+          {list.map((r, i) => (
             <button
               key={r.match.id}
               type="button"

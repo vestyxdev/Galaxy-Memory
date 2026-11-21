@@ -44,6 +44,7 @@ function App() {
         e.preventDefault();
         s.setSearchOpen(true);
       } else if (e.key === "r") s.resetCamera();
+      else if (e.key === "Escape") s.clearSelection();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

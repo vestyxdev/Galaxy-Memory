@@ -27,7 +27,7 @@ export function Dock() {
   return (
     <div className="absolute bottom-5 left-1/2 z-30 -translate-x-1/2">
       <div className="flex items-center gap-0.5 rounded-full border border-white/10 bg-[#0c0c10]/70 p-1 shadow-2xl backdrop-blur-md">
-        <DockButton onClick={openNewMemory} title="New memory (N)">
+        <DockButton onClick={() => openNewMemory()} title="New memory (N)">
           <Plus className="size-4" />
         </DockButton>
         <DockButton

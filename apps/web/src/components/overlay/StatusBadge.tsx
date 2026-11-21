@@ -11,6 +11,14 @@ function embedderLabel(name: string): string {
   return "Local hash (deterministic)";
 }
 
+function syncLabel(ts: number | null): string {
+  if (ts === null) return "—";
+  const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (s < 5) return "just now";
+  if (s < 60) return `${s}s ago`;
+  return `${Math.floor(s / 60)}m ago`;
+}
+
 interface BridgeStatus {
   mcpServerPath?: string;
   dbPath?: string;
@@ -36,12 +44,15 @@ export function StatusBadge() {
   const storage = useGalaxy((s) => s.storage);
   const embedderName = useGalaxy((s) => s.embedderName);
   const backend = useGalaxy((s) => s.backend);
+  const lastSyncAt = useGalaxy((s) => s.lastSyncAt);
 
   const [open, setOpen] = useState(false);
   const [bridge, setBridge] = useState<BridgeStatus>({});
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  // ticks the "Synced Xs ago" label while the popover is open
+  const [, setTick] = useState(0);
 
   useEffect(() => {
     if (!open || !import.meta.env.DEV) return;
@@ -49,6 +60,12 @@ export function StatusBadge() {
       .then((r) => (r.ok ? (r.json() as Promise<BridgeStatus>) : {}))
       .then(setBridge)
       .catch(() => setBridge({}));
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const i = setInterval(() => setTick((t) => t + 1), 5000);
+    return () => clearInterval(i);
   }, [open]);
 
   const mcpConfig = {
@@ -115,6 +132,7 @@ export function StatusBadge() {
             <Row label="Backend" value={backendLabel} />
             <Row label="Storage" value={storage || "—"} />
             <Row label="Embedder" value={embedderLabel(embedderName)} />
+            <Row label="Last sync" value={syncLabel(lastSyncAt)} />
             {bridge.dbPath && <Row label="Shared file" value={bridge.dbPath} />}
           </div>
 

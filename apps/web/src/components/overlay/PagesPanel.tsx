@@ -42,6 +42,7 @@ export function PagesPanel() {
               <ul>
                 {memories
                   .filter((m) => m.cluster === cluster)
+                  .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))
                   .map((m) => (
                     <li key={m.id}>
                       <button

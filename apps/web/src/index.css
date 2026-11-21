@@ -238,6 +238,14 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+/* [[wikilinks]] — violet, dashed, clearly interactive */
+.gm-markdown a[href^="gm://memory/"] {
+  color: #b9a7ff;
+  text-decoration-style: dashed;
+}
+.gm-markdown a[href^="gm://memory/"]:hover {
+  color: #d4c8ff;
+}
 .gm-markdown strong {
   color: rgb(255 255 255 / 0.9);
   font-weight: 600;
