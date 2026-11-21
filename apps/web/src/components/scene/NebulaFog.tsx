@@ -40,11 +40,11 @@ interface FogSprite {
 }
 
 const SPRITES: FogSprite[] = [
-  { position: [-9.5, 2.2, -3.5], scale: 16, opacity: 0.3, speed: 0.006 },
-  { position: [10.5, -1.4, -6.0], scale: 19, opacity: 0.24, speed: -0.004 },
-  { position: [6.0, 3.2, 7.5], scale: 13, opacity: 0.2, speed: 0.008 },
-  { position: [-7.0, -2.6, 6.5], scale: 15, opacity: 0.22, speed: -0.005 },
-  { position: [0.5, -3.4, -10.5], scale: 18, opacity: 0.18, speed: 0.003 },
+  { position: [-9.5, 2.2, -3.5], scale: 16, opacity: 0.08, speed: 0.006 },
+  { position: [10.5, -1.4, -6.0], scale: 19, opacity: 0.065, speed: -0.004 },
+  { position: [6.0, 3.2, 7.5], scale: 13, opacity: 0.055, speed: 0.008 },
+  { position: [-7.0, -2.6, 6.5], scale: 15, opacity: 0.07, speed: -0.005 },
+  { position: [0.5, -3.4, -10.5], scale: 18, opacity: 0.05, speed: 0.003 },
 ];
 
 /**
