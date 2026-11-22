@@ -1,8 +1,10 @@
 # Galaxy-Memory
 
+[![ci](https://github.com/vestyxdev/Galaxy-Memory/actions/workflows/ci.yml/badge.svg)](https://github.com/vestyxdev/Galaxy-Memory/actions/workflows/ci.yml)
+
 Infinite, semantically searchable long-term memory for AI coding agents — plus
 an interactive 3D knowledge graph centered on an Interstellar-inspired black
-hole.
+hole. MIT licensed.
 
 ## Layout
 
@@ -71,8 +73,8 @@ for a ready-to-paste config with this machine's absolute path, or see
 ```
 
 Tools: `search_memory` (Graph-Augmented RAG, optional 1-hop neighbors),
-`save_memory`, `update_memory`, `delete_memory`, `get_memory_context`,
-`list_clusters`.
+`save_memory`, `update_memory`, `delete_memory`, `get_memory` (full read),
+`get_memory_context`, `list_clusters`.
 Agent writes run the full pipeline — embed, `[[wikilink]]` explicit edges,
 top-5 semantic edges (>0.78 cosine) — with `source: "ai_agent"`. With Supabase
 configured, agent saves appear live in the web UI via `postgres_changes`

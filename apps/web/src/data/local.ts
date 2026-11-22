@@ -10,6 +10,8 @@ import { fileBridgeAvailable, createFileBridgeAdapter } from "./file-bridge";
 import { SEED_INPUTS } from "./seed";
 
 const STORAGE_KEY = "galaxy-memory:v1";
+// claim flag — set BEFORE the async seed so a second tab can't double-seed
+const SEEDED_KEY = "galaxy-memory:seeded";
 
 function createLocalStorageAdapter(): KvAdapter {
   return {
@@ -74,7 +76,8 @@ export async function createLocalBackend(embedder: Embedder): Promise<LocalBacke
     label: "Demo",
     semanticThreshold: 0.5,
   });
-  if (localStorage.getItem(STORAGE_KEY) === null) {
+  if (localStorage.getItem(SEEDED_KEY) === null) {
+    localStorage.setItem(SEEDED_KEY, "1");
     await seed(backend);
   }
   return { backend, storage: "Browser LocalStorage" };

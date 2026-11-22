@@ -190,7 +190,7 @@ function EditorForm({ memory }: { memory: Memory | undefined }) {
         {
           title: title.trim(),
           content,
-          summary: memory?.summary ?? deriveSummary(content),
+          summary: deriveSummary(content),
           cluster: cluster.trim() || undefined,
           tags: parseTags(tags),
         },

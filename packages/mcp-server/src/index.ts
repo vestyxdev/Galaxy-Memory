@@ -139,15 +139,17 @@ async function main() {
           .string()
           .refine((s) => s.trim().length > 0, "content must not be blank")
           .describe("Markdown body; [[Other Title]] creates edges"),
+        summary: z.string().optional().describe("Optional one-line summary"),
         cluster: z.string().optional().describe("Defaults to 'General'"),
         tags: z.array(z.string()).optional(),
       },
     },
-    async ({ title, content, cluster, tags }) => {
+    async ({ title, content, summary, cluster, tags }) => {
       try {
         const memory = await backend.saveMemory({
           title,
           content,
+          summary: summary ?? null,
           cluster,
           tags,
           source: "ai_agent",
@@ -216,6 +218,32 @@ async function main() {
         if (!existing) return fail(`Memory ${id} not found`);
         await backend.deleteMemory(id);
         return ok({ deleted: id, title: existing.title });
+      } catch (error) {
+        return fail(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "get_memory",
+    {
+      description: "Read one memory in full by id: complete markdown, tags, and metadata.",
+      inputSchema: {
+        id: z.string().uuid(),
+      },
+    },
+    async ({ id }) => {
+      try {
+        const memory = await backend.getMemory(id);
+        if (!memory) return fail(`Memory ${id} not found`);
+        const edges = await backend.edgesFor([id]);
+        const all = await backend.listMemories();
+        const titleOf = new Map(all.map((m) => [m.id, m.title]));
+        const connections = edges.map((e) => {
+          const other = e.source_id === id ? e.target_id : e.source_id;
+          return { title: titleOf.get(other) ?? other, edge_type: e.edge_type };
+        });
+        return ok({ ...memory, connections });
       } catch (error) {
         return fail(error);
       }

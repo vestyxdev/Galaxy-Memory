@@ -28,9 +28,7 @@ c.stdin.write(
   }) + "\n",
 );
 setTimeout(() => {
-  c.stdin.write(
-    JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) + "\n",
-  );
+  c.stdin.write(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) + "\n");
   c.stdin.write(
     JSON.stringify({
       jsonrpc: "2.0",

@@ -6,6 +6,7 @@ import { HomePane } from "@/components/overlay/HomePane";
 import { PagesPanel } from "@/components/overlay/PagesPanel";
 import { SearchPalette } from "@/components/overlay/SearchPalette";
 import { TopBar } from "@/components/overlay/TopBar";
+import { SceneBoundary } from "@/components/scene/SceneBoundary";
 import { useGalaxy } from "@/stores/galaxy";
 
 // three.js is ~1 MB — keep it out of the boot chunk; the shell paints first
@@ -63,9 +64,11 @@ function App() {
 
         <main className="relative min-w-0 flex-1 overflow-hidden">
           <Suspense fallback={null}>
-            <div className="animate-in fade-in absolute inset-0 duration-1000">
-              <SceneRoot />
-            </div>
+            <SceneBoundary>
+              <div className="animate-in fade-in absolute inset-0 duration-1000">
+                <SceneRoot />
+              </div>
+            </SceneBoundary>
           </Suspense>
           {status === "ready" && <Dock />}
           {/* soft inner vignette + left-edge fade into the home pane */}
