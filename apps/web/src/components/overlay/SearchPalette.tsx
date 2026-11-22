@@ -2,7 +2,7 @@ import { FileText, Search } from "lucide-react";
 import * as React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { MemoryMatch } from "@galaxy-memory/shared";
+import { hybridSearch, type HybridMatch, type MemoryMatch } from "@galaxy-memory/shared";
 
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -12,7 +12,7 @@ import { useGalaxy } from "@/stores/galaxy";
 
 interface Result {
   match: MemoryMatch;
-  keyword: boolean;
+  via: HybridMatch["via"] | null;
 }
 
 export function SearchPalette() {
@@ -36,48 +36,30 @@ export function SearchPalette() {
       [...memories]
         .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))
         .slice(0, 6)
-        .map((m) => ({ match: { ...m, similarity: 0 }, keyword: false })),
+        .map((m) => ({ match: { ...m, similarity: 0 }, via: null })),
     [memories],
   );
   const list = query.trim() ? results : recent;
 
-  // semantic + keyword merge; matching nodes light up in the scene as you type
+  // hybrid retrieval (FTS + vector + RRF); matching nodes light up as you type
   useEffect(() => {
-    const q = query.trim().toLowerCase();
+    const q = query.trim();
     if (!open || !q) return;
     let cancelled = false;
     const timer = setTimeout(() => {
       void (async () => {
-        const keywordHits = memories.filter(
-          (m) => m.title.toLowerCase().includes(q) || m.content.toLowerCase().includes(q),
-        );
-        let semantic: MemoryMatch[] = [];
+        let merged: Result[] = [];
         if (backend && embedder) {
           try {
-            const [vec] = await embedder.embed([query]);
-            if (vec) semantic = await backend.matchMemories(vec, 0.12, 10);
+            merged = (await hybridSearch(backend, embedder, q, { limit: 10 })).map((m) => ({
+              match: m,
+              via: m.via,
+            }));
           } catch {
-            // embedder offline (no key, no ollama) — keyword results still work
+            // backend hiccup — leave the list empty rather than crash the palette
           }
         }
         if (cancelled) return;
-
-        const byId = new Map<string, Result>();
-        for (const s of semantic) {
-          byId.set(s.id, {
-            match: s,
-            keyword: keywordHits.some((k) => k.id === s.id),
-          });
-        }
-        for (const k of keywordHits) {
-          if (!byId.has(k.id)) {
-            byId.set(k.id, { match: { ...k, similarity: 0 }, keyword: true });
-          }
-        }
-        const merged = [...byId.values()].sort(
-          (a, b) =>
-            b.match.similarity - a.match.similarity || Number(b.keyword) - Number(a.keyword),
-        );
         setResults(merged);
         setActive(0);
         setHighlight(new Set(merged.map((r) => r.match.id)));
@@ -87,7 +69,7 @@ export function SearchPalette() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [query, open, backend, embedder, memories, setHighlight]);
+  }, [query, open, backend, embedder, setHighlight]);
 
   const pick = useCallback(
     (id: string) => {
@@ -194,6 +176,14 @@ export function SearchPalette() {
                   {r.match.summary ?? r.match.content.slice(0, 80)}
                 </span>
               </span>
+              {r.via && (
+                <Badge
+                  variant="outline"
+                  className="shrink-0 border-white/10 text-[9px] text-white/35"
+                >
+                  {r.via}
+                </Badge>
+              )}
               {r.match.similarity > 0 && (
                 <span className="text-[10px] tabular-nums text-white/35">
                   {Math.round(r.match.similarity * 100)}%

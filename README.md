@@ -74,9 +74,13 @@ for a ready-to-paste config with this machine's absolute path, or see
 }
 ```
 
-Tools: `search_memory` (Graph-Augmented RAG, optional 1-hop neighbors),
+Tools: `search_memory` (hybrid FTS + vector RAG, optional 1-hop neighbors),
+`recall` (context-window packing with citations and a token budget),
 `save_memory`, `update_memory`, `delete_memory`, `get_memory` (full read),
-`get_memory_context`, `list_clusters`.
+`get_memory_context`, `list_clusters`, `link_memories`,
+`import_markdown` (Obsidian frontmatter + `#tags` + chunked long docs,
+content-hash dedup), `export_markdown`, `pin_memory`, `archive_memory`,
+`find_duplicates`, `graph_stats` (cluster counts + orphans).
 Agent writes run the full pipeline — embed, `[[wikilink]]` explicit edges,
 top-5 semantic edges (>0.78 cosine) — with `source: "ai_agent"`. With Supabase
 configured, agent saves appear live in the web UI via `postgres_changes`

@@ -4,6 +4,7 @@ import type {
   MemoryBackend,
   MemoryEdge,
   MemoryInput,
+  MemoryPatch,
 } from "@galaxy-memory/shared";
 import { create } from "zustand";
 
@@ -102,6 +103,8 @@ interface GalaxyState {
   /** Fly the camera to a cluster's orbital sector. */
   focusCluster(cluster: string): void;
   saveMemory(input: MemoryInput, id: string | null): Promise<Memory>;
+  /** Metadata-only patch (pin/archive) — no selection or editor side-effects. */
+  patchMemory(id: string, patch: MemoryPatch): Promise<void>;
   deleteMemory(id: string): Promise<void>;
 }
 
@@ -174,7 +177,9 @@ export const useGalaxy = create<GalaxyState>()((set, get) => ({
   async refresh() {
     const { backend } = get();
     if (!backend) return;
-    const [memories, edges] = await Promise.all([backend.listMemories(), backend.listEdges()]);
+    const [all, edges] = await Promise.all([backend.listMemories(), backend.listEdges()]);
+    // archived memories keep their rows + edges but stay out of the galaxy
+    const memories = all.filter((m) => !m.archived);
     const clusters = sortClusters(memories);
     set({
       memories,
@@ -277,6 +282,13 @@ export const useGalaxy = create<GalaxyState>()((set, get) => ({
       focusRequest: { id: memory.id, point: null, tick: s.focusRequest.tick + 1 },
     }));
     return memory;
+  },
+
+  async patchMemory(id, patch) {
+    const { backend } = get();
+    if (!backend) return;
+    await backend.updateMemory(id, patch);
+    await get().refresh();
   },
 
   async deleteMemory(id) {

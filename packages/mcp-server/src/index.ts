@@ -5,9 +5,18 @@ import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 import {
+  chunkMarkdown,
   collectSubgraph,
   createEmbedder,
   createKvBackend,
+  exportMarkdownDocument,
+  exportVaultMarkdown,
+  extractHashtags,
+  findDuplicatePairs,
+  hybridSearch,
+  packContext,
+  parseFrontmatter,
+  toWikilink,
   type Memory,
   type MemoryBackend,
   type MemoryMatch,
@@ -37,6 +46,8 @@ function summarize(m: Memory | MemoryMatch) {
     cluster: m.cluster,
     tags: m.tags,
     source: m.source,
+    pinned: m.pinned,
+    archived: m.archived,
     updated_at: m.updated_at,
     snippet: m.content.slice(0, 280),
     ...("similarity" in m ? { similarity: Math.round(m.similarity * 1000) / 1000 } : {}),
@@ -65,7 +76,7 @@ async function main() {
     });
   }
 
-  const server = new McpServer({ name: "galaxy-memory", version: "0.1.0" });
+  const server = new McpServer({ name: "galaxy-memory", version: "0.2.0" });
 
   server.registerTool(
     "search_memory",
@@ -82,14 +93,13 @@ async function main() {
     },
     async ({ query, limit, cluster, include_neighbors }) => {
       try {
-        const [queryEmbedding] = await embedder.embed([query]);
-        if (!queryEmbedding) throw new Error("embedder returned no vector");
-        const matches = await backend.matchMemories(
-          queryEmbedding,
-          SEARCH_THRESHOLD,
+        // hybrid retrieval: FTS + vector fused via RRF; embedder failure
+        // degrades to keyword-only inside hybridSearch.
+        const matches = await hybridSearch(backend, embedder, query, {
           limit,
-          cluster ?? null,
-        );
+          cluster: cluster ?? null,
+          vectorThreshold: SEARCH_THRESHOLD,
+        });
 
         let neighborsById = new Map<
           string,
@@ -119,7 +129,11 @@ async function main() {
         }
 
         return ok(
-          matches.map((m) => ({ ...summarize(m), neighbors: neighborsById.get(m.id) ?? [] })),
+          matches.map((m) => ({
+            ...summarize(m),
+            via: m.via,
+            neighbors: neighborsById.get(m.id) ?? [],
+          })),
         );
       } catch (error) {
         return fail(error);
@@ -186,9 +200,11 @@ async function main() {
         summary: z.string().nullable().optional().describe("One-line summary; null clears it"),
         cluster: z.string().optional(),
         tags: z.array(z.string()).optional(),
+        pinned: z.boolean().optional(),
+        archived: z.boolean().optional(),
       },
     },
-    async ({ id, title, content, summary, cluster, tags }) => {
+    async ({ id, title, content, summary, cluster, tags, pinned, archived }) => {
       try {
         const memory = await backend.updateMemory(id, {
           title,
@@ -196,6 +212,8 @@ async function main() {
           summary,
           cluster,
           tags,
+          pinned,
+          archived,
         });
         return ok(summarize(memory));
       } catch (error) {
@@ -284,6 +302,302 @@ async function main() {
     async () => {
       try {
         return ok(await backend.listClusters());
+      } catch (error) {
+        return fail(error);
+      }
+    },
+  );
+
+  /** id-or-title resolution shared by link/recall-style tools. */
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  async function resolveMemory(ref: string): Promise<Memory | null> {
+    return UUID_RE.test(ref.trim())
+      ? backend.getMemory(ref.trim())
+      : backend.findMemoryByTitle(ref);
+  }
+
+  server.registerTool(
+    "recall",
+    {
+      description:
+        "Context-window packing: hybrid-searches memories, then returns the top " +
+        "matches plus their 1-hop link neighbors clipped to a token budget. " +
+        "Each entry carries a citation ([rank] title — id) for the agent to quote.",
+      inputSchema: {
+        query: z.string().min(1),
+        limit: z.number().int().min(1).max(20).default(8),
+        token_budget: z.number().int().min(200).max(32000).default(2000),
+        cluster: z.string().optional(),
+      },
+    },
+    async ({ query, limit, token_budget, cluster }) => {
+      try {
+        const matches = await hybridSearch(backend, embedder, query, {
+          limit,
+          cluster: cluster ?? null,
+        });
+        if (matches.length === 0) return ok({ entries: [], tokens_used: 0, omitted: [] });
+        const [edges, all] = await Promise.all([
+          backend.edgesFor(matches.map((m) => m.id)),
+          backend.listMemories(),
+        ]);
+        const byId = new Map(all.map((m) => [m.id, m]));
+        const packed = packContext(matches, edges, byId, { tokenBudget: token_budget });
+        return ok({ ...packed, tokens_used: packed.tokensUsed });
+      } catch (error) {
+        return fail(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "link_memories",
+    {
+      description:
+        "Create explicit [[wikilink]]-style edges between two memories, both " +
+        "directions. Accepts ids or exact titles.",
+      inputSchema: {
+        from: z.string().min(1).describe("id or exact title of the source memory"),
+        to: z.string().min(1).describe("id or exact title of the target memory"),
+      },
+    },
+    async ({ from, to }) => {
+      try {
+        const a = await resolveMemory(from);
+        if (!a) return fail(`Memory not found: ${from}`);
+        const b = await resolveMemory(to);
+        if (!b) return fail(`Memory not found: ${to}`);
+        if (a.id === b.id) return fail("Cannot link a memory to itself");
+        const pairs: [string, string][] = [
+          [a.id, b.id],
+          [b.id, a.id],
+        ];
+        for (const [source_id, target_id] of pairs) {
+          await backend.upsertEdge({ source_id, target_id, edge_type: "explicit", weight: 1 });
+        }
+        return ok({ linked: [a.title, b.title], directions: 2 });
+      } catch (error) {
+        return fail(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "import_markdown",
+    {
+      description:
+        "Import an Obsidian-compatible markdown document. Parses frontmatter " +
+        "(title/cluster/tags/created/pinned), merges #hashtags from the body, " +
+        "chunks long documents at headings with overlap + context headers, " +
+        "and dedups chunks by content hash so re-imports are no-ops.",
+      inputSchema: {
+        content: z
+          .string()
+          .refine((s) => s.trim().length > 0, "content must not be blank")
+          .describe("Full markdown, optionally with ---frontmatter---"),
+        title: z.string().optional().describe("Overrides frontmatter title / first heading"),
+        cluster: z.string().optional().describe("Overrides frontmatter cluster"),
+        chunk_size: z.number().int().min(400).max(8000).default(1600),
+      },
+    },
+    async ({ content, title, cluster, chunk_size }) => {
+      try {
+        const { frontmatter, body } = parseFrontmatter(content);
+        const fmTags = (frontmatter.tags ?? "")
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean);
+        const tags = [...new Set([...fmTags, ...extractHashtags(body)])];
+        const docTitle =
+          title ?? frontmatter.title ?? body.match(/^#\s+(.*)$/m)?.[1]?.trim() ?? "Imported note";
+        const docCluster = cluster ?? frontmatter.cluster;
+        const pinned = frontmatter.pinned === "true";
+        const created =
+          frontmatter.created && !Number.isNaN(Date.parse(frontmatter.created))
+            ? new Date(frontmatter.created).toISOString()
+            : undefined;
+
+        const chunks = chunkMarkdown(body.trim(), { maxChars: chunk_size, overlap: 200 });
+        const single = chunks.length <= 1;
+
+        let hub: Memory | null = null;
+        const ids: string[] = [];
+        const created_ids: string[] = [];
+        if (!single) {
+          // parent note links every part; parts link back via [[title]]
+          hub = await backend.saveMemory({
+            title: docTitle,
+            content: `Index note for the imported document. Parts:\n${chunks
+              .map((_, i) => `- ${toWikilink(`${docTitle} §${i + 1}`)}`)
+              .join("\n")}`,
+            cluster: docCluster,
+            tags,
+            pinned,
+            created_at: created,
+          });
+          ids.push(hub.id);
+          created_ids.push(hub.id);
+        }
+
+        for (let i = 0; i < chunks.length; i++) {
+          const chunk = chunks[i]!;
+          const partTitle = single ? docTitle : `${docTitle} §${i + 1}`;
+          const header = single
+            ? ""
+            : `Part ${i + 1} of ${toWikilink(docTitle)}` +
+              (chunk.context ? ` — ${chunk.context}` : "") +
+              "\n\n";
+          const before = new Set(ids);
+          const memory = await backend.saveMemory({
+            title: partTitle,
+            content: header + chunk.body,
+            cluster: docCluster,
+            tags,
+            pinned,
+            created_at: created,
+          });
+          ids.push(memory.id);
+          if (!before.has(memory.id)) created_ids.push(memory.id);
+        }
+
+        return ok({
+          title: docTitle,
+          parts: single ? 1 : chunks.length,
+          ids,
+          created: created_ids.length,
+          skipped_duplicates: ids.length - created_ids.length,
+          frontmatter: Object.keys(frontmatter).length > 0 ? frontmatter : undefined,
+        });
+      } catch (error) {
+        return fail(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "export_markdown",
+    {
+      description:
+        "Export memories as Obsidian-compatible markdown with frontmatter " +
+        "(title, cluster, tags, pinned, archived, timestamps, id). One memory " +
+        "by id, or the whole vault grouped by cluster.",
+      inputSchema: {
+        id: z.string().uuid().optional(),
+        cluster: z.string().optional().describe("Vault export: one cluster only"),
+      },
+    },
+    async ({ id, cluster }) => {
+      try {
+        if (id) {
+          const memory = await backend.getMemory(id);
+          if (!memory) return fail(`Memory ${id} not found`);
+          return ok({ markdown: exportMarkdownDocument(memory) });
+        }
+        const all = await backend.listMemories();
+        const filtered = cluster ? all.filter((m) => m.cluster === cluster) : all;
+        return ok({ markdown: exportVaultMarkdown(filtered), memories: filtered.length });
+      } catch (error) {
+        return fail(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "pin_memory",
+    {
+      description:
+        "Pin or unpin a memory. Pinned memories get a ranking boost in " +
+        "hybrid search — use for critical long-term facts.",
+      inputSchema: { id: z.string().uuid(), pinned: z.boolean().default(true) },
+    },
+    async ({ id, pinned }) => {
+      try {
+        const memory = await backend.updateMemory(id, { pinned });
+        return ok(summarize(memory));
+      } catch (error) {
+        return fail(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "archive_memory",
+    {
+      description:
+        "Archive or unarchive a memory. Archived memories stay in the store " +
+        "with their edges but are hidden from search, clusters, and the graph " +
+        "— soft-delete without breaking references.",
+      inputSchema: { id: z.string().uuid(), archived: z.boolean().default(true) },
+    },
+    async ({ id, archived }) => {
+      try {
+        const memory = await backend.updateMemory(id, { archived });
+        return ok(summarize(memory));
+      } catch (error) {
+        return fail(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "find_duplicates",
+    {
+      description:
+        "Scan stored embeddings for near-duplicate memories (cosine ≥ " +
+        "threshold). O(n²) — scans at most `cap` newest memories.",
+      inputSchema: {
+        threshold: z.number().min(0.5).max(1).default(0.9),
+        cap: z.number().int().min(10).max(20000).default(2000),
+      },
+    },
+    async ({ threshold, cap }) => {
+      try {
+        const items = backend.listEmbeddings
+          ? await backend.listEmbeddings()
+          : await backend.listMemories();
+        const scanned = items.slice(-cap);
+        const pairs = findDuplicatePairs(scanned, threshold);
+        return ok({
+          pairs,
+          scanned: scanned.length,
+          total: items.length,
+          truncated: items.length > scanned.length,
+        });
+      } catch (error) {
+        return fail(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "graph_stats",
+    {
+      description:
+        "Vault statistics: totals, cluster counts, pinned/archived counts, " +
+        "and orphan memories (no edges in either direction).",
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const [memories, edges, clusters] = await Promise.all([
+          backend.listMemories(),
+          backend.listEdges(),
+          backend.listClusters(),
+        ]);
+        const connected = new Set<string>();
+        for (const e of edges) {
+          connected.add(e.source_id);
+          connected.add(e.target_id);
+        }
+        const orphans = memories.filter((m) => !connected.has(m.id) && !m.archived);
+        return ok({
+          memories: memories.length,
+          edges: edges.length,
+          clusters,
+          pinned: memories.filter((m) => m.pinned).length,
+          archived: memories.filter((m) => m.archived).length,
+          orphans: orphans.map((m) => ({ id: m.id, title: m.title, cluster: m.cluster })),
+        });
       } catch (error) {
         return fail(error);
       }

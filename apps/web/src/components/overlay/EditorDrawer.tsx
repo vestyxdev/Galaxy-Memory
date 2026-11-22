@@ -1,5 +1,5 @@
 import { marked } from "marked";
-import { Link2, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, Link2, Pin, PinOff, Trash2 } from "lucide-react";
 import * as React from "react";
 import { useCallback, useMemo, useRef, useState } from "react";
 
@@ -86,6 +86,7 @@ function EditorForm({ memory }: { memory: Memory | undefined }) {
   const edges = useGalaxy((s) => s.edges);
   const clusters = useGalaxy((s) => s.clusters);
   const saveMemory = useGalaxy((s) => s.saveMemory);
+  const patchMemory = useGalaxy((s) => s.patchMemory);
   const deleteMemory = useGalaxy((s) => s.deleteMemory);
   const closeDrawer = useGalaxy((s) => s.closeDrawer);
   const openMemory = useGalaxy((s) => s.openMemory);
@@ -104,20 +105,44 @@ function EditorForm({ memory }: { memory: Memory | undefined }) {
   const [acIndex, setAcIndex] = useState(0);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
-  const connections = useMemo<Connection[]>(() => {
-    if (!editingId) return [];
+  const { connections, backlinks } = useMemo(() => {
+    const out: Connection[] = [];
+    const back: Connection[] = [];
+    if (!editingId) return { connections: out, backlinks: back };
     const titleOf = new Map(memories.map((m) => [m.id, m.title]));
-    return edges
-      .filter((e) => e.source_id === editingId || e.target_id === editingId)
-      .map((e) => {
+    const incoming = new Set<string>();
+    for (const e of edges) {
+      // backlinks: memory → me, where the pair isn't already shown outgoing.
+      // Reciprocal explicit links count once — they live under "connected".
+      if (e.target_id === editingId && e.source_id !== editingId) {
+        const reciprocal = edges.some(
+          (r) => r.source_id === editingId && r.target_id === e.source_id,
+        );
+        if (!reciprocal && !incoming.has(e.source_id)) {
+          incoming.add(e.source_id);
+          back.push({
+            id: e.source_id,
+            title: titleOf.get(e.source_id) ?? e.source_id,
+            edge_type: e.edge_type,
+            weight: e.weight,
+          });
+        }
+      }
+      if (e.source_id === editingId || e.target_id === editingId) {
         const other = e.source_id === editingId ? e.target_id : e.source_id;
-        return {
-          id: other,
-          title: titleOf.get(other) ?? other,
-          edge_type: e.edge_type,
-          weight: e.weight,
-        };
-      });
+        if (!out.some((c) => c.id === other && c.edge_type === e.edge_type)) {
+          out.push({
+            id: other,
+            title: titleOf.get(other) ?? other,
+            edge_type: e.edge_type,
+            weight: e.weight,
+          });
+        }
+      }
+    }
+    // pure-backlink sources already listed as connections drop out
+    const outIds = new Set(out.map((c) => c.id));
+    return { connections: out, backlinks: back.filter((c) => !outIds.has(c.id)) };
   }, [edges, editingId, memories]);
 
   const acSuggestions = useMemo(() => {
@@ -359,9 +384,66 @@ function EditorForm({ memory }: { memory: Memory | undefined }) {
             </ul>
           </div>
         )}
+
+        {backlinks.length > 0 && (
+          <div>
+            <h3 className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-white/40">
+              <Link2 className="size-3 rotate-180" />
+              Backlinks
+            </h3>
+            <ul className="space-y-0.5">
+              {backlinks.map((c) => (
+                <li key={`back-${c.id}-${c.edge_type}`}>
+                  <button
+                    type="button"
+                    onClick={() => openMemory(c.id)}
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-white/70 transition-colors hover:bg-white/5 hover:text-white"
+                  >
+                    <span className="min-w-0 flex-1 truncate">{c.title}</span>
+                    <Badge variant="muted">{c.edge_type}</Badge>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-2 border-t border-white/10 px-5 py-3">
+        {memory && (
+          <>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              title={memory.pinned ? "Unpin (remove search boost)" : "Pin (boost in search)"}
+              onClick={() => void patchMemory(memory.id, { pinned: !memory.pinned })}
+              className={cn(
+                "text-white/45 hover:text-white",
+                memory.pinned && "text-amber-200/80 hover:text-amber-100",
+              )}
+            >
+              {memory.pinned ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              title={memory.archived ? "Unarchive" : "Archive (hide from search and graph)"}
+              onClick={() => {
+                void patchMemory(memory.id, { archived: !memory.archived });
+                if (!memory.archived) closeDrawer();
+              }}
+              className="text-white/45 hover:text-white"
+            >
+              {memory.archived ? (
+                <ArchiveRestore className="size-3.5" />
+              ) : (
+                <Archive className="size-3.5" />
+              )}
+            </Button>
+          </>
+        )}
         {memory && (
           <Button
             type="button"
