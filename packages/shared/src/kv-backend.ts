@@ -1,6 +1,8 @@
 import type { MemoryBackend } from "./backend.js";
 import { cosineSimilarity, type Embedder } from "./embeddings.js";
+import { contentHash } from "./markdown.js";
 import { embedMemoryText, syncMemoryEdges } from "./pipeline.js";
+import { fuseRanked, InvertedIndex } from "./search.js";
 import type { ClusterCount, Memory, MemoryEdge, MemoryMatch } from "./types.js";
 import { DEFAULT_CLUSTER } from "./types.js";
 
@@ -44,14 +46,36 @@ export function createKvBackend(
 ): MemoryBackend {
   const threshold = opts.semanticThreshold ?? 0.55;
   let state: KvState | null = null;
+  // lazily-built FTS index, keyed to the loaded state object
+  let indexedFor: KvState | null = null;
+  let index: InvertedIndex | null = null;
+
+  /** Backfill fields added after v0.1 docs were written. */
+  function normalize(s: KvState): KvState {
+    for (const m of s.memories) {
+      m.pinned ??= false;
+      m.archived ??= false;
+      m.content_hash ??= null;
+    }
+    return s;
+  }
 
   async function load(): Promise<KvState> {
     // never hand out a shared EMPTY object — callers mutate it in place
-    if (!state) state = (await adapter.load()) ?? emptyState();
+    if (!state) state = normalize((await adapter.load()) ?? emptyState());
     return state;
   }
 
+  function indexFor(s: KvState): InvertedIndex {
+    if (indexedFor !== s || !index) {
+      index = new InvertedIndex(s.memories);
+      indexedFor = s;
+    }
+    return index;
+  }
+
   async function persist(): Promise<void> {
+    index = null; // state mutated in place — drop the FTS index
     if (state) await adapter.save(state);
   }
 
@@ -70,6 +94,7 @@ export function createKvBackend(
     async listClusters() {
       const counts = new Map<string, number>();
       for (const m of (await load()).memories) {
+        if (m.archived) continue;
         counts.set(m.cluster, (counts.get(m.cluster) ?? 0) + 1);
       }
       return [...counts.entries()]
@@ -87,11 +112,20 @@ export function createKvBackend(
     },
 
     async saveMemory(input) {
+      const hash = contentHash(input.content);
+      // Content-hash dedup: re-ingesting identical content is a no-op and
+      // returns the existing memory instead of creating a twin node.
+      const existing = (await load()).memories.find((m) => m.content_hash === hash);
+      if (existing) return existing;
+
       // Embed BEFORE touching the cached snapshot — subscribe() invalidates
       // `state` on external writes, and any snapshot captured before this
       // await would be stale by persist time.
       const embedding = await embedMemoryText(embedder, input.title, input.content);
       const s = await load();
+      // re-check after the await — a concurrent writer may have landed it
+      const raced = s.memories.find((m) => m.content_hash === hash);
+      if (raced) return raced;
       const now = new Date().toISOString();
       const memory: Memory = {
         id: crypto.randomUUID(),
@@ -102,6 +136,9 @@ export function createKvBackend(
         tags: input.tags ?? [],
         embedding,
         source: input.source ?? "user",
+        pinned: input.pinned ?? false,
+        archived: input.archived ?? false,
+        content_hash: hash,
         created_at: input.created_at ?? now,
         updated_at: input.created_at ?? now,
       };
@@ -135,6 +172,9 @@ export function createKvBackend(
       if (patch.summary !== undefined) current.summary = patch.summary;
       if (patch.cluster !== undefined) current.cluster = patch.cluster;
       if (patch.tags !== undefined) current.tags = patch.tags;
+      if (patch.pinned !== undefined) current.pinned = patch.pinned;
+      if (patch.archived !== undefined) current.archived = patch.archived;
+      if (reembed) current.content_hash = contentHash(content);
       current.embedding = embedding;
       current.updated_at = new Date().toISOString();
       if (reembed) await syncMemoryEdges(backend, current, threshold);
@@ -154,7 +194,7 @@ export function createKvBackend(
       return s.memories
         .filter(
           (m): m is Memory & { embedding: number[] } =>
-            m.embedding !== null && (cluster == null || m.cluster === cluster),
+            m.embedding !== null && !m.archived && (cluster == null || m.cluster === cluster),
         )
         .map((m): MemoryMatch => ({
           ...m,
@@ -163,6 +203,22 @@ export function createKvBackend(
         .filter((m) => m.similarity > matchThreshold)
         .sort((a, b) => b.similarity - a.similarity)
         .slice(0, count);
+    },
+
+    async searchMemories({ query, queryEmbedding, limit, cluster }) {
+      const s = await load();
+      const candidates = s.memories.filter(
+        (m) => !m.archived && (cluster == null || m.cluster === cluster),
+      );
+      const fts = indexFor(s).score(query);
+      const vector = queryEmbedding
+        ? candidates
+            .filter((m): m is Memory & { embedding: number[] } => m.embedding !== null)
+            .map((m) => ({ id: m.id, similarity: cosineSimilarity(queryEmbedding, m.embedding) }))
+            .sort((a, b) => b.similarity - a.similarity)
+            .slice(0, limit * 4)
+        : [];
+      return fuseRanked({ vector, fts, candidates, limit });
     },
 
     async edgesFor(ids) {

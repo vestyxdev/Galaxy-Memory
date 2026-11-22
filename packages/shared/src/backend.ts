@@ -1,11 +1,13 @@
 import type {
   ClusterCount,
   EdgeType,
+  HybridMatch,
   Memory,
   MemoryEdge,
   MemoryInput,
   MemoryMatch,
   MemoryPatch,
+  SearchRequest,
 } from "./types.js";
 
 /**
@@ -38,8 +40,22 @@ export interface MemoryBackend {
     cluster?: string | null,
   ): Promise<MemoryMatch[]>;
 
+  /**
+   * Optional native hybrid search (keyword FTS + vector + fusion). When
+   * absent, `hybridSearch()` fuses listMemories/matchMemories client-side.
+   * `queryEmbedding` is null when the embedder is offline — keyword-only.
+   */
+  searchMemories?(req: SearchRequest): Promise<HybridMatch[]>;
+
   /** All edges touching any of the given memory ids (either direction). */
   edgesFor(ids: string[]): Promise<MemoryEdge[]>;
+
+  /**
+   * Optional: id/title/embedding tuples for maintenance ops (duplicate
+   * scans). Heavy on Supabase — use listMemories when it already carries
+   * vectors (KV backend does).
+   */
+  listEmbeddings?(): Promise<{ id: string; title: string; embedding: number[] | null }[]>;
   /** Remove outgoing edges of a node, optionally narrowed to one edge type. */
   clearOutgoingEdges(id: string, edgeType?: EdgeType): Promise<void>;
   upsertEdge(edge: Omit<MemoryEdge, "id">): Promise<void>;

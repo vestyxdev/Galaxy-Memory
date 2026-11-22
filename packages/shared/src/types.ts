@@ -14,6 +14,12 @@ export interface Memory {
   /** Present on the save/update path; list endpoints omit it for payload size. */
   embedding: number[] | null;
   source: MemorySource;
+  /** Pinned memories rank higher in hybrid search — for long-term facts. */
+  pinned: boolean;
+  /** Archived memories are hidden from search/graph but keep their edges. */
+  archived: boolean;
+  /** Dedup fingerprint of normalized content; null on pre-v0.2 rows. */
+  content_hash: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -31,6 +37,19 @@ export interface MemoryMatch extends Memory {
   similarity: number;
 }
 
+export interface HybridMatch extends MemoryMatch {
+  /** Which ranked list(s) produced the hit — useful for UI badges. */
+  via: "vector" | "fts" | "both";
+}
+
+export interface SearchRequest {
+  query: string;
+  /** Null when the embedder is offline — search degrades to keyword-only. */
+  queryEmbedding: number[] | null;
+  limit: number;
+  cluster?: string | null;
+}
+
 export interface MemoryInput {
   title: string;
   content: string;
@@ -38,6 +57,8 @@ export interface MemoryInput {
   cluster?: string;
   tags?: string[];
   source?: MemorySource;
+  pinned?: boolean;
+  archived?: boolean;
   /** Optional backdated timestamp (seeds, imports). Defaults to now. */
   created_at?: string;
 }
@@ -48,6 +69,8 @@ export interface MemoryPatch {
   summary?: string | null;
   cluster?: string;
   tags?: string[];
+  pinned?: boolean;
+  archived?: boolean;
 }
 
 export interface ClusterCount {
