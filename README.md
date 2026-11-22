@@ -6,6 +6,8 @@ Infinite, semantically searchable long-term memory for AI coding agents — plus
 an interactive 3D knowledge graph centered on an Interstellar-inspired black
 hole. MIT licensed.
 
+![Galaxy-Memory — a black hole accretion disk surrounded by memory stars and their connections](docs/screenshot.png)
+
 ## Layout
 
 ```
