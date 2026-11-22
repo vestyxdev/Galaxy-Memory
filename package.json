@@ -29,7 +29,9 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "preview": "npm run preview -w @galaxy-memory/web",
-    "mcp": "npm run build -w @galaxy-memory/shared -w @galaxy-memory/mcp-server && npm run start -w @galaxy-memory/mcp-server"
+    "mcp": "npm run build -w @galaxy-memory/shared -w @galaxy-memory/mcp-server && npm run start -w @galaxy-memory/mcp-server",
+    "test": "node scripts/run-tests.mjs",
+    "verify": "npm run lint && npm run typecheck && npm run format:check && npm run build"
   },
   "devDependencies": {
     "oxfmt": "^0.79.0",

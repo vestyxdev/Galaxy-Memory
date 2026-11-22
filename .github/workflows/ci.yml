@@ -25,3 +25,6 @@ jobs:
 
       # build runs `tsc -b` first, so typecheck is covered here
       - run: npm run build
+
+      # MCP stdio e2e probes against an isolated temp db
+      - run: npm test

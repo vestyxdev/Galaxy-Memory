@@ -1,11 +1,13 @@
 // Edge-case probe for the MCP server — feeds invalid/hostile inputs and
 // prints what each tool actually returns. Not a gate; a diagnostic.
 import { spawn } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const SERVER = "packages/mcp-server/dist/index.js";
 const child = spawn("node", [SERVER], {
   stdio: ["pipe", "pipe", "inherit"],
-  env: { ...process.env, GALAXY_MEMORY_DB: `${process.env.TEMP}\\gm-edge-test.json` },
+  env: { ...process.env, GALAXY_MEMORY_DB: join(tmpdir(), "gm-edge-test.json") },
 });
 let buf = "";
 const pending = new Map();

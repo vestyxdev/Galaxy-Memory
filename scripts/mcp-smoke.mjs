@@ -6,7 +6,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 const SERVER = "packages/mcp-server/dist/index.js";
-const dbPath = join(homedir(), ".galaxy-memory", "memories.json");
+const dbPath = process.env.GALAXY_MEMORY_DB ?? join(homedir(), ".galaxy-memory", "memories.json");
 
 const child = spawn("node", [SERVER], { stdio: ["pipe", "pipe", "inherit"] });
 let buf = "";

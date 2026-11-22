@@ -2,8 +2,11 @@
 // save_memory through the MCP server and verify the backup appears.
 import { spawn } from "node:child_process";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-const db = `${process.env.TEMP}/gm-corrupt-test.json`;
+const tmp = tmpdir();
+const db = join(tmp, "gm-corrupt-test.json");
 writeFileSync(db, "{broken json!!!");
 console.log("poisoned", db);
 
@@ -43,9 +46,7 @@ setTimeout(() => {
 }, 800);
 setTimeout(() => {
   c.kill();
-  const backups = readdirSync(process.env.TEMP).filter((f) =>
-    f.startsWith("gm-corrupt-test.json.corrupt"),
-  );
+  const backups = readdirSync(tmp).filter((f) => f.startsWith("gm-corrupt-test.json.corrupt"));
   console.log("quarantined backups:", backups);
   console.log("new db head:", readFileSync(db, "utf8").slice(0, 160));
   console.log("save response tail:", out.slice(-200));
