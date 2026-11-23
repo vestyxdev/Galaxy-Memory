@@ -146,7 +146,9 @@ async function main() {
     {
       description:
         "Save a new memory: embeds it, stores it, resolves [[wikilinks]] into explicit " +
-        "edges, and attaches semantic edges to its nearest neighbors.",
+        "edges, and attaches semantic edges to its nearest neighbors. Identical content " +
+        "(hash) returns the existing memory; near-identical content merges into it as a " +
+        "newer revision — keeping the original id so backlinks survive.",
       inputSchema: {
         title: z.string().trim().min(1),
         content: z
@@ -328,9 +330,10 @@ async function main() {
         limit: z.number().int().min(1).max(20).default(8),
         token_budget: z.number().int().min(200).max(32000).default(2000),
         cluster: z.string().optional(),
+        include_neighbors: z.boolean().default(true),
       },
     },
-    async ({ query, limit, token_budget, cluster }) => {
+    async ({ query, limit, token_budget, cluster, include_neighbors }) => {
       try {
         const matches = await hybridSearch(backend, embedder, query, {
           limit,
@@ -342,7 +345,10 @@ async function main() {
           backend.listMemories(),
         ]);
         const byId = new Map(all.map((m) => [m.id, m]));
-        const packed = packContext(matches, edges, byId, { tokenBudget: token_budget });
+        const packed = packContext(matches, edges, byId, {
+          tokenBudget: token_budget,
+          includeNeighbors: include_neighbors,
+        });
         return ok({ ...packed, tokens_used: packed.tokensUsed });
       } catch (error) {
         return fail(error);

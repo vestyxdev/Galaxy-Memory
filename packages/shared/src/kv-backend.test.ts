@@ -112,6 +112,54 @@ describe("kv-backend lifecycle", () => {
     expect(m!.content_hash).toBeNull();
   });
 
+  it("merges a near-duplicate save into the existing memory, preserving backlinks", async () => {
+    const backend = createKvBackend(memAdapter(), createLocalEmbedder());
+    // the target must exist before the wikilink resolves into an edge
+    const original = await backend.saveMemory({
+      title: "Deploy runbook",
+      content: "Ship via docker build, tag the image, push to registry, deploy.",
+      tags: ["ops"],
+    });
+    const linker = await backend.saveMemory({
+      title: "Linker",
+      content: "see [[Deploy runbook]]",
+    });
+    const edgesBefore = await backend.edgesFor([original.id]);
+    expect(edgesBefore.length).toBeGreaterThan(0);
+
+    // near-identical revision — same fact, slight rewording + new tag
+    const merged = await backend.saveMemory({
+      title: "Deploy runbook v2",
+      content: "Ship via docker build, tag the image, push to registry, deploy today.",
+      tags: ["release"],
+    });
+
+    expect(merged.id).toBe(original.id);
+    // canonical id survives → the Linker's backlink still points at it
+    const edgesAfter = await backend.edgesFor([original.id]);
+    expect(edgesAfter.length).toBe(edgesBefore.length);
+    expect((await backend.listMemories()).length).toBe(2); // linker + merged
+    const canon = (await backend.getMemory(original.id))!;
+    expect(canon.content).toContain("deploy today");
+    expect(canon.tags.sort()).toEqual(["ops", "release"]);
+    expect(Date.parse(canon.updated_at)).toBeGreaterThanOrEqual(Date.parse(canon.created_at));
+    void linker;
+  });
+
+  it("does NOT merge genuinely different content (below threshold)", async () => {
+    const backend = createKvBackend(memAdapter(), createLocalEmbedder());
+    const a = await backend.saveMemory({
+      title: "Cooking",
+      content: "Goulash needs paprika, onions, beef and slow simmering.",
+    });
+    const b = await backend.saveMemory({
+      title: "Compilers",
+      content: "Rust borrows lifetimes at compile time without GC.",
+    });
+    expect(b.id).not.toBe(a.id);
+    expect(await backend.listMemories()).toHaveLength(2);
+  });
+
   it("deleting a memory removes its edges too", async () => {
     const backend = createKvBackend(memAdapter(), createLocalEmbedder());
     // B must exist first — [[B]] in A resolves to an edge only against

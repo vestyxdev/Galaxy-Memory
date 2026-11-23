@@ -4,7 +4,7 @@ import type { MemoryBackend } from "./backend.js";
 import type { Embedder } from "./embeddings.js";
 import { contentHash } from "./markdown.js";
 import { embedMemoryText, syncMemoryEdges } from "./pipeline.js";
-import { fuseRanked, InvertedIndex } from "./search.js";
+import { fuseRanked, InvertedIndex, NEAR_DUP_THRESHOLD } from "./search.js";
 import type {
   ClusterCount,
   EdgeType,
@@ -303,6 +303,21 @@ export function createSupabaseBackend(
         }
       }
       const embedding = await embedMemoryText(embedder, input.title, input.content);
+
+      // Near-duplicate merge: cosine >= threshold means this is a newer
+      // revision of an existing fact — merge into that row so its id (and
+      // every backlink) survives.
+      if (embedding) {
+        const [dup] = await backend.matchMemories(embedding, NEAR_DUP_THRESHOLD, 1);
+        if (dup) {
+          return backend.updateMemory(dup.id, {
+            content: input.content,
+            summary: input.summary,
+            tags: [...new Set([...dup.tags, ...(input.tags ?? [])])],
+          });
+        }
+      }
+
       const row = {
         title: input.title,
         content: input.content,

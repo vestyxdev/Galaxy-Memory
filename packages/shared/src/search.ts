@@ -188,6 +188,39 @@ export interface SearchOptions {
   cluster?: string | null;
   /** Vector prefilter for matchMemories when falling back. */
   vectorThreshold?: number;
+  /**
+   * Obsidian-style graph traversal: 1-hop neighbors of the top hits get a
+   * score bump so well-linked memories surface. 0 disables; default 0.35.
+   */
+  graphBoost?: number;
+}
+
+/** Cosine >= this and a save merges into the existing note (see saveMemory). */
+export const NEAR_DUP_THRESHOLD = 0.93;
+
+const GRAPH_TOP_N = 5;
+
+/**
+ * Re-rank fused results with a link-graph signal: memories that are 1-hop
+ * neighbors of the top-N hits score `1 + boost` — the same signal Obsidian
+ * uses when it "related notes" you toward well-connected pages.
+ */
+export function applyGraphBoost(
+  fused: HybridMatch[],
+  edges: MemoryEdge[],
+  { boost = 0.35, topN = GRAPH_TOP_N }: { boost?: number; topN?: number } = {},
+): HybridMatch[] {
+  if (boost <= 0 || fused.length === 0) return fused;
+  const top = new Set(fused.slice(0, topN).map((m) => m.id));
+  const boosted = new Set<string>();
+  for (const e of edges) {
+    if (top.has(e.source_id) && !top.has(e.target_id)) boosted.add(e.target_id);
+    if (top.has(e.target_id) && !top.has(e.source_id)) boosted.add(e.source_id);
+  }
+  if (boosted.size === 0) return fused;
+  return fused
+    .map((m) => (boosted.has(m.id) ? { ...m, similarity: m.similarity * (1 + boost) } : m))
+    .sort((a, b) => b.similarity - a.similarity);
 }
 
 /**
@@ -199,7 +232,7 @@ export async function hybridSearch(
   backend: MemoryBackend,
   embedder: Embedder | null,
   query: string,
-  { limit = 10, cluster = null, vectorThreshold = 0.1 }: SearchOptions = {},
+  { limit = 10, cluster = null, vectorThreshold = 0.1, graphBoost = 0.35 }: SearchOptions = {},
 ): Promise<HybridMatch[]> {
   let queryEmbedding: number[] | null = null;
   if (embedder && query.trim()) {
@@ -211,25 +244,40 @@ export async function hybridSearch(
     }
   }
 
+  let fused: HybridMatch[];
   if (backend.searchMemories) {
-    return backend.searchMemories({ query, queryEmbedding, limit, cluster });
+    // fetch extra so graph boost has neighbors to lift, then re-clip
+    fused = await backend.searchMemories({
+      query,
+      queryEmbedding,
+      limit: limit * 2,
+      cluster,
+    });
+  } else {
+    const all = (await backend.listMemories()).filter(
+      (m) => !m.archived && (cluster == null || m.cluster === cluster),
+    );
+    const fts = new InvertedIndex(all).score(query);
+    const vector = queryEmbedding
+      ? (await backend.matchMemories(queryEmbedding, vectorThreshold, limit * 4, cluster))
+          .filter((m) => !m.archived)
+          .map((m) => ({ id: m.id, similarity: m.similarity }))
+      : [];
+    fused = fuseRanked({ vector, fts, candidates: all, limit: limit * 2 });
   }
 
-  const all = (await backend.listMemories()).filter(
-    (m) => !m.archived && (cluster == null || m.cluster === cluster),
-  );
-  const fts = new InvertedIndex(all).score(query);
-  const vector = queryEmbedding
-    ? (await backend.matchMemories(queryEmbedding, vectorThreshold, limit * 4, cluster))
-        .filter((m) => !m.archived)
-        .map((m) => ({ id: m.id, similarity: m.similarity }))
-    : [];
-  return fuseRanked({ vector, fts, candidates: all, limit });
+  if (graphBoost > 0 && fused.length > 1) {
+    const edges = await backend.edgesFor(fused.slice(0, GRAPH_TOP_N).map((m) => m.id));
+    fused = applyGraphBoost(fused, edges, { boost: graphBoost });
+  }
+  return fused.slice(0, limit);
 }
 
 export interface PackedEntry {
   rank: number;
   id: string;
+  /** Short 8-char id for citation — full id stays in `id`. */
+  cite: string;
   title: string;
   cluster: string;
   score: number;
@@ -255,11 +303,26 @@ const NEIGHBOR_SNIPPET = 220;
  * clipped to a char budget derived from a token limit. Every entry carries
  * a citation `[rank] title — id` an agent can quote back.
  */
+/** Clip at a paragraph/sentence boundary when possible — no mid-word cuts. */
+function clipText(text: string, room: number): string {
+  if (text.length <= room) return text;
+  const window = text.slice(0, room);
+  const para = window.lastIndexOf("\n\n");
+  if (para >= room * 0.6) return `${window.slice(0, para)}\n\n[…]`;
+  const sent = Math.max(window.lastIndexOf(". "), window.lastIndexOf(".\n"));
+  if (sent >= room * 0.6) return `${window.slice(0, sent + 1)} […]`;
+  return `${window.slice(0, room - 1)}…`;
+}
+
 export function packContext(
   matches: HybridMatch[],
   edges: MemoryEdge[],
   byId: Map<string, Memory>,
-  { tokenBudget = 2000, maxNeighbors = 6 }: { tokenBudget?: number; maxNeighbors?: number } = {},
+  {
+    tokenBudget = 2000,
+    maxNeighbors = 6,
+    includeNeighbors = true,
+  }: { tokenBudget?: number; maxNeighbors?: number; includeNeighbors?: boolean } = {},
 ): PackedContext {
   const budget = tokenBudget * CHARS_PER_TOKEN;
   let used = 0;
@@ -268,19 +331,21 @@ export function packContext(
   const included = new Set<string>();
 
   matches.forEach((m, i) => {
-    const header = `[${i + 1}] ${m.title} — ${m.cluster} — id:${m.id}\n`;
+    // compact citation header — 8-char id is unique enough to recall
+    const header = `[${i + 1}] ${m.title} · #${m.cluster} · id:${m.id.slice(0, 8)}\n`;
     // -1: the entry's trailing newline counts against the budget too
     const room = budget - used - header.length - 1;
     if (room < 120) {
       omitted.push({ id: m.id, title: m.title });
       return;
     }
-    const text = m.content.length <= room ? m.content : `${m.content.slice(0, room - 1)}…`;
+    const text = clipText(m.content, room);
     used += header.length + text.length + 1;
     included.add(m.id);
     entries.push({
       rank: i + 1,
       id: m.id,
+      cite: m.id.slice(0, 8),
       title: m.title,
       cluster: m.cluster,
       score: m.similarity,
@@ -289,40 +354,46 @@ export function packContext(
     });
   });
 
-  const seen = new Set(included);
-  const neighbors: { id: string; via: string }[] = [];
-  for (const e of edges) {
-    const srcIn = included.has(e.source_id);
-    const dstIn = included.has(e.target_id);
-    if (srcIn === dstIn) continue;
-    const id = srcIn ? e.target_id : e.source_id;
-    if (seen.has(id)) continue;
-    seen.add(id);
-    const viaHit = byId.get(srcIn ? e.source_id : e.target_id);
-    neighbors.push({ id, via: viaHit?.title ?? "" });
-    if (neighbors.length >= maxNeighbors) break;
-  }
+  if (includeNeighbors) {
+    const seen = new Set(included);
+    const neighbors: { id: string; via: string }[] = [];
+    for (const e of edges) {
+      const srcIn = included.has(e.source_id);
+      const dstIn = included.has(e.target_id);
+      if (srcIn === dstIn) continue;
+      const id = srcIn ? e.target_id : e.source_id;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const viaHit = byId.get(srcIn ? e.source_id : e.target_id);
+      neighbors.push({ id, via: viaHit?.title ?? "" });
+      if (neighbors.length >= maxNeighbors) break;
+    }
 
-  let rank = entries.length;
-  for (const n of neighbors) {
-    const m = byId.get(n.id);
-    if (!m || m.archived) continue;
-    const header = `[+${++rank}] ${m.title} — linked from ${n.via} — id:${m.id}\n`;
-    const snippet = (m.summary ?? m.content.slice(0, NEIGHBOR_SNIPPET)).slice(0, NEIGHBOR_SNIPPET);
-    const room = budget - used - header.length;
-    if (room < 80) break;
-    const text = snippet.length <= room ? snippet : `${snippet.slice(0, room - 1)}…`;
-    used += header.length + text.length + 1;
-    entries.push({
-      rank,
-      id: m.id,
-      title: m.title,
-      cluster: m.cluster,
-      score: 0,
-      kind: "neighbor",
-      via: n.via,
-      text,
-    });
+    let rank = entries.length;
+    for (const n of neighbors) {
+      const m = byId.get(n.id);
+      if (!m || m.archived) continue;
+      const header = `[+${++rank}] ${m.title} · linked from ${n.via} · id:${m.id.slice(0, 8)}\n`;
+      const snippet = (m.summary ?? m.content.slice(0, NEIGHBOR_SNIPPET)).slice(
+        0,
+        NEIGHBOR_SNIPPET,
+      );
+      const room = budget - used - header.length - 1;
+      if (room < 80) break;
+      const text = clipText(snippet, room);
+      used += header.length + text.length + 1;
+      entries.push({
+        rank,
+        id: m.id,
+        cite: m.id.slice(0, 8),
+        title: m.title,
+        cluster: m.cluster,
+        score: 0,
+        kind: "neighbor",
+        via: n.via,
+        text,
+      });
+    }
   }
 
   return { entries, tokensUsed: Math.ceil(used / CHARS_PER_TOKEN), omitted };
