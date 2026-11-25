@@ -96,5 +96,14 @@ export async function collectSubgraph(
     frontier = missing;
   }
 
-  return { memories: [...seen.values()], edges: [...edgeAcc.values()] };
+  // archived neighbors keep their edges but stay out of context reads —
+  // the explicitly-requested root always survives. Edges to dropped
+  // nodes go with them.
+  const live = new Set(
+    [...seen.values()].filter((m) => !m.archived || m.id === rootId).map((m) => m.id),
+  );
+  return {
+    memories: [...seen.values()].filter((m) => live.has(m.id)),
+    edges: [...edgeAcc.values()].filter((e) => live.has(e.source_id) && live.has(e.target_id)),
+  };
 }

@@ -144,6 +144,20 @@ export function contentHash(content: string): string {
   return `${h1.toString(16)}${h2.toString(16)}`;
 }
 
+/**
+ * One-line summary derived from content — first non-heading text line,
+ * truncated. Used when a caller rewrites content without supplying a
+ * summary, so the stored line doesn't go stale.
+ */
+export function deriveSummary(content: string): string | null {
+  const line = content
+    .split("\n")
+    .map((l) => l.replace(/^#+\s*/, "").trim())
+    .find((l) => l.length > 0);
+  if (!line) return null;
+  return line.length > 140 ? `${line.slice(0, 137)}…` : line;
+}
+
 export interface ExportableMemory {
   id: string;
   title: string;

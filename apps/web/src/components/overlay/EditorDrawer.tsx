@@ -3,6 +3,7 @@ import { Archive, ArchiveRestore, Link2, Pin, PinOff, Trash2 } from "lucide-reac
 import * as React from "react";
 import { useCallback, useMemo, useRef, useState } from "react";
 
+import { deriveSummary } from "@galaxy-memory/shared";
 import type { Memory, MemoryEdge } from "@galaxy-memory/shared";
 
 import { Badge } from "@/components/ui/badge";
@@ -18,15 +19,6 @@ import {
 import { clusterColor } from "@/lib/layout";
 import { cn } from "@/lib/utils";
 import { useGalaxy } from "@/stores/galaxy";
-
-function deriveSummary(content: string): string | null {
-  const line = content
-    .split("\n")
-    .map((l) => l.replace(/^#+\s*/, "").trim())
-    .find((l) => l.length > 0);
-  if (!line) return null;
-  return line.length > 140 ? `${line.slice(0, 137)}…` : line;
-}
 
 function parseTags(raw: string): string[] {
   return [
@@ -417,7 +409,11 @@ function EditorForm({ memory }: { memory: Memory | undefined }) {
               variant="ghost"
               size="sm"
               title={memory.pinned ? "Unpin (remove search boost)" : "Pin (boost in search)"}
-              onClick={() => void patchMemory(memory.id, { pinned: !memory.pinned })}
+              onClick={() =>
+                patchMemory(memory.id, { pinned: !memory.pinned }).catch((err) =>
+                  setSaveError(err instanceof Error ? err.message : String(err)),
+                )
+              }
               className={cn(
                 "text-white/45 hover:text-white",
                 memory.pinned && "text-amber-200/80 hover:text-amber-100",
@@ -431,8 +427,12 @@ function EditorForm({ memory }: { memory: Memory | undefined }) {
               size="sm"
               title={memory.archived ? "Unarchive" : "Archive (hide from search and graph)"}
               onClick={() => {
-                void patchMemory(memory.id, { archived: !memory.archived });
-                if (!memory.archived) closeDrawer();
+                patchMemory(memory.id, { archived: !memory.archived })
+                  .then(() => {
+                    // only close once the archive actually landed
+                    if (!memory.archived) closeDrawer();
+                  })
+                  .catch((err) => setSaveError(err instanceof Error ? err.message : String(err)));
               }}
               className="text-white/45 hover:text-white"
             >

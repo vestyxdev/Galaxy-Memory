@@ -263,7 +263,8 @@ async function main() {
           const other = e.source_id === id ? e.target_id : e.source_id;
           return { title: titleOf.get(other) ?? other, edge_type: e.edge_type };
         });
-        return ok({ ...memory, connections });
+        // embedding is 1536 floats — useless to an agent, huge in the payload
+        return ok({ ...memory, embedding: null, connections });
       } catch (error) {
         return fail(error);
       }
@@ -313,9 +314,11 @@ async function main() {
   /** id-or-title resolution shared by link/recall-style tools. */
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   async function resolveMemory(ref: string): Promise<Memory | null> {
-    return UUID_RE.test(ref.trim())
-      ? backend.getMemory(ref.trim())
-      : backend.findMemoryByTitle(ref);
+    // uuid-lookup first; a memory literally TITLED like a uuid still resolves
+    if (UUID_RE.test(ref.trim())) {
+      return (await backend.getMemory(ref.trim())) ?? backend.findMemoryByTitle(ref);
+    }
+    return backend.findMemoryByTitle(ref);
   }
 
   server.registerTool(

@@ -1,6 +1,6 @@
 import type { MemoryBackend } from "./backend.js";
 import { cosineSimilarity, type Embedder } from "./embeddings.js";
-import { contentHash } from "./markdown.js";
+import { contentHash, deriveSummary } from "./markdown.js";
 import { embedMemoryText, syncMemoryEdges } from "./pipeline.js";
 import { fuseRanked, InvertedIndex, NEAR_DUP_THRESHOLD } from "./search.js";
 import type { ClusterCount, Memory, MemoryEdge, MemoryMatch } from "./types.js";
@@ -113,7 +113,13 @@ export function createKvBackend(
 
     async findMemoryByTitle(title) {
       const needle = title.trim().toLowerCase();
-      return (await load()).memories.find((m) => m.title.trim().toLowerCase() === needle) ?? null;
+      // title resolution (wikilinks, link_by_title) never lands on archived
+      // rows — linking to a forgotten note would create a ghost edge.
+      return (
+        (await load()).memories.find(
+          (m) => !m.archived && m.title.trim().toLowerCase() === needle,
+        ) ?? null
+      );
     },
 
     async saveMemory(input) {
@@ -196,6 +202,7 @@ export function createKvBackend(
       current.title = title;
       current.content = content;
       if (patch.summary !== undefined) current.summary = patch.summary;
+      else if (reembed) current.summary = deriveSummary(content);
       if (patch.cluster !== undefined) current.cluster = patch.cluster;
       if (patch.tags !== undefined) current.tags = patch.tags;
       if (patch.pinned !== undefined) current.pinned = patch.pinned;

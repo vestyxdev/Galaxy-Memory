@@ -195,8 +195,13 @@ export interface SearchOptions {
   graphBoost?: number;
 }
 
-/** Cosine >= this and a save merges into the existing note (see saveMemory). */
-export const NEAR_DUP_THRESHOLD = 0.93;
+/**
+ * Cosine >= this and a save merges into the existing note (see saveMemory).
+ * 0.95 keeps true reword-merges while sparing template siblings under the
+ * local hash embedder (measured: reword 0.957 vs same-template 0.944).
+ * Semantic embedders separate these far more cleanly.
+ */
+export const NEAR_DUP_THRESHOLD = 0.95;
 
 const GRAPH_TOP_N = 5;
 
