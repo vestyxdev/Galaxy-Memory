@@ -146,7 +146,9 @@ async function main() {
     {
       description:
         "Save a new memory: embeds it, stores it, resolves [[wikilinks]] into explicit " +
-        "edges, and attaches semantic edges to its nearest neighbors.",
+        "edges, and attaches semantic edges to its nearest neighbors. Identical content " +
+        "(hash) returns the existing memory; near-identical content merges into it as a " +
+        "newer revision — keeping the original id so backlinks survive.",
       inputSchema: {
         title: z.string().trim().min(1),
         content: z
@@ -261,7 +263,8 @@ async function main() {
           const other = e.source_id === id ? e.target_id : e.source_id;
           return { title: titleOf.get(other) ?? other, edge_type: e.edge_type };
         });
-        return ok({ ...memory, connections });
+        // embedding is 1536 floats — useless to an agent, huge in the payload
+        return ok({ ...memory, embedding: null, connections });
       } catch (error) {
         return fail(error);
       }
@@ -311,9 +314,11 @@ async function main() {
   /** id-or-title resolution shared by link/recall-style tools. */
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   async function resolveMemory(ref: string): Promise<Memory | null> {
-    return UUID_RE.test(ref.trim())
-      ? backend.getMemory(ref.trim())
-      : backend.findMemoryByTitle(ref);
+    // uuid-lookup first; a memory literally TITLED like a uuid still resolves
+    if (UUID_RE.test(ref.trim())) {
+      return (await backend.getMemory(ref.trim())) ?? backend.findMemoryByTitle(ref);
+    }
+    return backend.findMemoryByTitle(ref);
   }
 
   server.registerTool(
@@ -328,9 +333,10 @@ async function main() {
         limit: z.number().int().min(1).max(20).default(8),
         token_budget: z.number().int().min(200).max(32000).default(2000),
         cluster: z.string().optional(),
+        include_neighbors: z.boolean().default(true),
       },
     },
-    async ({ query, limit, token_budget, cluster }) => {
+    async ({ query, limit, token_budget, cluster, include_neighbors }) => {
       try {
         const matches = await hybridSearch(backend, embedder, query, {
           limit,
@@ -342,7 +348,10 @@ async function main() {
           backend.listMemories(),
         ]);
         const byId = new Map(all.map((m) => [m.id, m]));
-        const packed = packContext(matches, edges, byId, { tokenBudget: token_budget });
+        const packed = packContext(matches, edges, byId, {
+          tokenBudget: token_budget,
+          includeNeighbors: include_neighbors,
+        });
         return ok({ ...packed, tokens_used: packed.tokensUsed });
       } catch (error) {
         return fail(error);
@@ -412,6 +421,7 @@ async function main() {
           title ?? frontmatter.title ?? body.match(/^#\s+(.*)$/m)?.[1]?.trim() ?? "Imported note";
         const docCluster = cluster ?? frontmatter.cluster;
         const pinned = frontmatter.pinned === "true";
+        const archived = frontmatter.archived === "true";
         const created =
           frontmatter.created && !Number.isNaN(Date.parse(frontmatter.created))
             ? new Date(frontmatter.created).toISOString()
@@ -433,6 +443,7 @@ async function main() {
             cluster: docCluster,
             tags,
             pinned,
+            archived,
             created_at: created,
           });
           ids.push(hub.id);
@@ -454,6 +465,7 @@ async function main() {
             cluster: docCluster,
             tags,
             pinned,
+            archived,
             created_at: created,
           });
           ids.push(memory.id);

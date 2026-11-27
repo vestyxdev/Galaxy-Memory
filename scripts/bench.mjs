@@ -30,13 +30,18 @@ const TOPICS = [
   ["testing", "unit integration e2e fixtures mocks coverage"],
 ];
 
+// deterministic-ish unique terms per note so the corpus is realistically
+// distinct — templated notes are near-dupes and intentionally merge.
+const WORDS = "alpha bravo charlie delta echo foxtrot golf hotel india juliet".split(" ");
+
 console.log(`bench: ingesting ${N} memories…`);
 const t0 = performance.now();
 for (let i = 0; i < N; i++) {
   const [cluster, body] = TOPICS[i % TOPICS.length];
+  const unique = `${WORDS[i % 10]} ${WORDS[(i * 3) % 10]} ${WORDS[(i * 7) % 10]} ${i}`;
   await backend.saveMemory({
     title: `Note ${i} ${cluster}`,
-    content: `${body} — variant ${i} ${"filler text ".repeat(8)}`,
+    content: `${body} — variant ${i} ${unique} ${"filler text ".repeat(6)}`,
     cluster,
   });
 }

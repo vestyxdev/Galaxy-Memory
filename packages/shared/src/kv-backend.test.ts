@@ -112,6 +112,87 @@ describe("kv-backend lifecycle", () => {
     expect(m!.content_hash).toBeNull();
   });
 
+  it("merges a near-duplicate save into the existing memory, preserving backlinks", async () => {
+    const backend = createKvBackend(memAdapter(), createLocalEmbedder());
+    // the target must exist before the wikilink resolves into an edge
+    const original = await backend.saveMemory({
+      title: "Deploy runbook",
+      content: "Ship via docker build, tag the image, push to registry, deploy.",
+      tags: ["ops"],
+    });
+    await backend.saveMemory({ title: "Linker", content: "see [[Deploy runbook]]" });
+    const edgesBefore = await backend.edgesFor([original.id]);
+    expect(edgesBefore.length).toBeGreaterThan(0);
+
+    // near-identical revision — same note re-saved with a slight update;
+    // a reworded TITLE also shifts the title+content embedding, so merges
+    // are intentionally conservative (misses beat over-consolidation).
+    const merged = await backend.saveMemory({
+      title: "Deploy runbook",
+      content: "Ship via docker build, tag the image, push to registry, deploy today.",
+      tags: ["release"],
+    });
+
+    expect(merged.id).toBe(original.id);
+    // canonical id survives → the Linker's backlink still points at it
+    const edgesAfter = await backend.edgesFor([original.id]);
+    expect(edgesAfter.length).toBe(edgesBefore.length);
+    expect((await backend.listMemories()).length).toBe(2); // linker + merged
+    // SAFETY: the merge contract guarantees the canonical id still exists
+    const canon = (await backend.getMemory(original.id))!;
+    expect(canon.content).toContain("deploy today");
+    expect(canon.tags.sort()).toEqual(["ops", "release"]);
+    expect(Date.parse(canon.updated_at)).toBeGreaterThanOrEqual(Date.parse(canon.created_at));
+  });
+
+  it("does NOT merge genuinely different content (below threshold)", async () => {
+    const backend = createKvBackend(memAdapter(), createLocalEmbedder());
+    const a = await backend.saveMemory({
+      title: "Cooking",
+      content: "Goulash needs paprika, onions, beef and slow simmering.",
+    });
+    const b = await backend.saveMemory({
+      title: "Compilers",
+      content: "Rust borrows lifetimes at compile time without GC.",
+    });
+    expect(b.id).not.toBe(a.id);
+    expect(await backend.listMemories()).toHaveLength(2);
+  });
+
+  it("title resolution never lands on archived rows", async () => {
+    const backend = createKvBackend(memAdapter(), createLocalEmbedder());
+    const ghost = await backend.saveMemory({ title: "Ghost note", content: "forgotten" });
+    await backend.updateMemory(ghost.id, { archived: true });
+    expect(await backend.findMemoryByTitle("Ghost note")).toBeNull();
+    // id-lookup still works — archived ≠ deleted
+    expect((await backend.getMemory(ghost.id))?.title).toBe("Ghost note");
+  });
+
+  it("rewriting content without a summary re-derives it (never stale)", async () => {
+    const backend = createKvBackend(memAdapter(), createLocalEmbedder());
+    const m = await backend.saveMemory({
+      title: "Doc",
+      content: "first version line",
+      summary: "first version line",
+    });
+    const updated = await backend.updateMemory(m.id, {
+      content: "# Header\n\ncompletely new body",
+    });
+    expect(updated.summary).toBe("Header");
+  });
+
+  it("collectSubgraph drops archived neighbors and their edges, keeps the root", async () => {
+    const { collectSubgraph } = await import("./pipeline");
+    const backend = createKvBackend(memAdapter(), createLocalEmbedder());
+    const leaf = await backend.saveMemory({ title: "Leaf", content: "target" });
+    const root = await backend.saveMemory({ title: "Root", content: "links [[Leaf]]" });
+    await backend.updateMemory(leaf.id, { archived: true });
+
+    const sub = await collectSubgraph(backend, root.id, 1);
+    expect(sub.memories.map((m) => m.id)).toEqual([root.id]);
+    expect(sub.edges).toHaveLength(0);
+  });
+
   it("deleting a memory removes its edges too", async () => {
     const backend = createKvBackend(memAdapter(), createLocalEmbedder());
     // B must exist first — [[B]] in A resolves to an edge only against

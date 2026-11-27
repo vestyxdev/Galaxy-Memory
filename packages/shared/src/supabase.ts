@@ -2,9 +2,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { MemoryBackend } from "./backend.js";
 import type { Embedder } from "./embeddings.js";
-import { contentHash } from "./markdown.js";
+import { contentHash, deriveSummary } from "./markdown.js";
 import { embedMemoryText, syncMemoryEdges } from "./pipeline.js";
-import { fuseRanked, InvertedIndex } from "./search.js";
+import { fuseRanked, InvertedIndex, NEAR_DUP_THRESHOLD } from "./search.js";
 import type {
   ClusterCount,
   EdgeType,
@@ -282,7 +282,9 @@ export function createSupabaseBackend(
       const rows = await fetchAll((from, to) =>
         selectMemories(extended).order("id").range(from, to),
       );
-      const row = rows.find((r) => r.title.trim().toLowerCase() === needle);
+      const row = rows.find(
+        (r) => !("archived" in r && r.archived) && r.title.trim().toLowerCase() === needle,
+      );
       return row ? toMemory(row) : null;
     },
 
@@ -303,6 +305,21 @@ export function createSupabaseBackend(
         }
       }
       const embedding = await embedMemoryText(embedder, input.title, input.content);
+
+      // Near-duplicate merge: cosine >= threshold means this is a newer
+      // revision of an existing fact — merge into that row so its id (and
+      // every backlink) survives.
+      if (embedding) {
+        const [dup] = await backend.matchMemories(embedding, NEAR_DUP_THRESHOLD, 1);
+        if (dup) {
+          return backend.updateMemory(dup.id, {
+            content: input.content,
+            summary: input.summary,
+            tags: [...new Set([...dup.tags, ...(input.tags ?? [])])],
+          });
+        }
+      }
+
       const row = {
         title: input.title,
         content: input.content,
@@ -346,7 +363,12 @@ export function createSupabaseBackend(
       const fields = {
         ...(patch.title !== undefined ? { title } : {}),
         ...(patch.content !== undefined ? { content } : {}),
-        ...(patch.summary !== undefined ? { summary: patch.summary } : {}),
+        // content changed but no summary supplied → re-derive, never stale
+        ...(patch.summary !== undefined
+          ? { summary: patch.summary }
+          : reembed
+            ? { summary: deriveSummary(content) }
+            : {}),
         ...(patch.cluster !== undefined ? { cluster: patch.cluster } : {}),
         ...(patch.tags !== undefined ? { tags: patch.tags } : {}),
         ...(v2 && patch.pinned !== undefined ? { pinned: patch.pinned } : {}),

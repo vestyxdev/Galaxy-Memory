@@ -1,8 +1,8 @@
 import type { MemoryBackend } from "./backend.js";
 import { cosineSimilarity, type Embedder } from "./embeddings.js";
-import { contentHash } from "./markdown.js";
+import { contentHash, deriveSummary } from "./markdown.js";
 import { embedMemoryText, syncMemoryEdges } from "./pipeline.js";
-import { fuseRanked, InvertedIndex } from "./search.js";
+import { fuseRanked, InvertedIndex, NEAR_DUP_THRESHOLD } from "./search.js";
 import type { ClusterCount, Memory, MemoryEdge, MemoryMatch } from "./types.js";
 import { DEFAULT_CLUSTER } from "./types.js";
 
@@ -30,6 +30,11 @@ export interface KvBackendOptions {
   label?: string;
   /** Demo embeddings are flatter than OpenAI's — lower bar keeps edges visible. */
   semanticThreshold?: number;
+  /**
+   * Cosine threshold for the save-time near-dup merge (default 0.93).
+   * Set to 1 to disable consolidation.
+   */
+  nearDupThreshold?: number;
 }
 
 const emptyState = (): KvState => ({ memories: [], edges: [] });
@@ -108,7 +113,13 @@ export function createKvBackend(
 
     async findMemoryByTitle(title) {
       const needle = title.trim().toLowerCase();
-      return (await load()).memories.find((m) => m.title.trim().toLowerCase() === needle) ?? null;
+      // title resolution (wikilinks, link_by_title) never lands on archived
+      // rows — linking to a forgotten note would create a ghost edge.
+      return (
+        (await load()).memories.find(
+          (m) => !m.archived && m.title.trim().toLowerCase() === needle,
+        ) ?? null
+      );
     },
 
     async saveMemory(input) {
@@ -126,6 +137,27 @@ export function createKvBackend(
       // re-check after the await — a concurrent writer may have landed it
       const raced = s.memories.find((m) => m.content_hash === hash);
       if (raced) return raced;
+
+      // Near-duplicate merge: an existing memory whose embedding sits within
+      // the consolidation threshold is a newer revision of the same fact, not
+      // a new note. Merge INTO it — keeping its id preserves every backlink.
+      const nearDup = opts.nearDupThreshold ?? NEAR_DUP_THRESHOLD;
+      if (embedding && nearDup < 1) {
+        const dup = s.memories.find(
+          (m) =>
+            !m.archived &&
+            m.embedding !== null &&
+            cosineSimilarity(embedding, m.embedding) >= nearDup,
+        );
+        if (dup) {
+          return backend.updateMemory(dup.id, {
+            content: input.content,
+            summary: input.summary,
+            tags: [...new Set([...dup.tags, ...(input.tags ?? [])])],
+          });
+        }
+      }
+
       const now = new Date().toISOString();
       const memory: Memory = {
         id: crypto.randomUUID(),
@@ -170,6 +202,7 @@ export function createKvBackend(
       current.title = title;
       current.content = content;
       if (patch.summary !== undefined) current.summary = patch.summary;
+      else if (reembed) current.summary = deriveSummary(content);
       if (patch.cluster !== undefined) current.cluster = patch.cluster;
       if (patch.tags !== undefined) current.tags = patch.tags;
       if (patch.pinned !== undefined) current.pinned = patch.pinned;

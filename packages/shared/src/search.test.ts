@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Memory } from "./types";
 import {
+  applyGraphBoost,
   findDuplicatePairs,
   fold,
   fuseRanked,
@@ -108,6 +109,32 @@ describe("fuseRanked", () => {
   });
 });
 
+describe("applyGraphBoost", () => {
+  it("lifts 1-hop neighbors of top hits in the final ranking", () => {
+    const hub = mem({ title: "Hub" });
+    const linked = mem({ title: "Linked note" });
+    const unlinked = mem({ title: "Unlinked note" });
+    const fused = [
+      { ...hub, similarity: 1.0, via: "fts" as const },
+      { ...unlinked, similarity: 0.5, via: "fts" as const },
+      { ...linked, similarity: 0.4, via: "fts" as const },
+    ];
+    const edges = [
+      {
+        id: "e",
+        source_id: hub.id,
+        target_id: linked.id,
+        edge_type: "explicit" as const,
+        weight: 1,
+      },
+    ];
+    // topN=1: only the hub counts as a "top hit" — its link out to `linked`
+    // boosts 0.4 -> 0.6, overtaking the unlinked 0.5.
+    const boosted = applyGraphBoost(fused, edges, { boost: 0.5, topN: 1 });
+    expect(boosted.map((m) => m.id)).toEqual([hub.id, linked.id, unlinked.id]);
+  });
+});
+
 describe("hybridSearch", () => {
   it("works keyword-only when the embedder is null (offline fallback)", async () => {
     const docs = [
@@ -180,6 +207,32 @@ describe("packContext", () => {
     );
     expect(packed.entries.length).toBeGreaterThanOrEqual(1);
     expect(packed.tokensUsed).toBeLessThanOrEqual(300);
+  });
+
+  it("includeNeighbors:false suppresses the neighbor section", () => {
+    const a = mem({ title: "Hit", content: "body" });
+    const n = mem({ title: "Neighbor", content: "extra" });
+    const matches = [{ ...a, similarity: 1, via: "fts" as const }];
+    const edges = [
+      { id: "e", source_id: a.id, target_id: n.id, edge_type: "explicit" as const, weight: 1 },
+    ];
+    const byId = new Map([a, n].map((m) => [m.id, m]));
+    const packed = packContext(matches, edges, byId, {
+      tokenBudget: 500,
+      includeNeighbors: false,
+    });
+    expect(packed.entries.every((e) => e.kind === "hit")).toBe(true);
+  });
+
+  it("entries carry short cites for token-lean references", () => {
+    const a = mem({ title: "Hit", content: "body" });
+    const packed = packContext(
+      [{ ...a, similarity: 1, via: "fts" as const }],
+      [],
+      new Map([[a.id, a]]),
+      { tokenBudget: 400 },
+    );
+    expect(packed.entries[0]!.cite).toBe(a.id.slice(0, 8));
   });
 });
 
