@@ -32,9 +32,7 @@ const TOPICS = [
 
 // deterministic-ish unique terms per note so the corpus is realistically
 // distinct — templated notes are near-dupes and intentionally merge.
-const WORDS = "alpha bravo charlie delta echo foxtrot golf hotel india juliet".split(
-  " ",
-);
+const WORDS = "alpha bravo charlie delta echo foxtrot golf hotel india juliet".split(" ");
 
 console.log(`bench: ingesting ${N} memories…`);
 const t0 = performance.now();

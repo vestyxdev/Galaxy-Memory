@@ -421,6 +421,7 @@ async function main() {
           title ?? frontmatter.title ?? body.match(/^#\s+(.*)$/m)?.[1]?.trim() ?? "Imported note";
         const docCluster = cluster ?? frontmatter.cluster;
         const pinned = frontmatter.pinned === "true";
+        const archived = frontmatter.archived === "true";
         const created =
           frontmatter.created && !Number.isNaN(Date.parse(frontmatter.created))
             ? new Date(frontmatter.created).toISOString()
@@ -442,6 +443,7 @@ async function main() {
             cluster: docCluster,
             tags,
             pinned,
+            archived,
             created_at: created,
           });
           ids.push(hub.id);
@@ -463,6 +465,7 @@ async function main() {
             cluster: docCluster,
             tags,
             pinned,
+            archived,
             created_at: created,
           });
           ids.push(memory.id);
